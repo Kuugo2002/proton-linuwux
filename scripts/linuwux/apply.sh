@@ -563,6 +563,7 @@ in_segv && /rec\.ExceptionAddress = \(void \*\)RIP_sig\(ucontext\);/ {
         print
         print "    detect_cpu_vendor();"
         print "    linuwux_prepare_kuser_write_alias();"
+        print "    linuwux_debug_init();"
         print "    syscall(SYS_arch_prctl, ARCH_SET_CPUID, 0);"
         next
     }

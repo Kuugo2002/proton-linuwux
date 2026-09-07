@@ -12,6 +12,7 @@
 #define LINUWUX_HOOKS_INCLUDED
 
 #include <errno.h>
+#include <signal.h>
 #include <unistd.h>
 #ifndef ARCH_SET_CPUID
 #define ARCH_SET_CPUID 0x1012
@@ -47,6 +48,44 @@ struct linuwux_syscall_router
 
 static struct linuwux_syscall_router linuwux_router;
 static KUSER_SHARED_DATA *linuwux_kuser_write_alias;
+
+/*
+ * Optional diagnostics.
+ *
+ * Initialization happens outside signal context.  Signal-path diagnostics
+ * use write(2) only and never influence protocol or routing decisions.
+ */
+static volatile sig_atomic_t linuwux_debug_enabled;
+
+static void linuwux_debug_init(void)
+{
+    const char *value = getenv("LINUWUX_DEBUG");
+
+    linuwux_debug_enabled =
+        value && value[0] == '1' && value[1] == '\0';
+
+    if (linuwux_debug_enabled)
+    {
+        static const char message[] =
+            "LinUwUx DEBUG [init] enabled\n";
+
+        write(STDERR_FILENO, message, sizeof(message) - 1);
+    }
+}
+
+static inline void linuwux_debug_event(const char *message, size_t length)
+{
+    if (linuwux_debug_enabled)
+    {
+        int saved_errno = errno;
+
+        (void)write(STDERR_FILENO, message, length);
+        errno = saved_errno;
+    }
+}
+
+#define LINUWUX_DEBUG_EVENT(message) \
+    linuwux_debug_event((message), sizeof(message) - 1)
 
 uint64_t SyscallBypassMagic = 0x1337133713371337;
 
@@ -126,6 +165,7 @@ static void linuwux_snapshot_current_kuser_state(void)
     }
 
     linuwux_current_kuser_snapshot_valid = 1;
+    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [kuser] current snapshot saved\n");
 }
 
 static void linuwux_restore_pre_current_kuser_state(void)
@@ -158,6 +198,7 @@ static void linuwux_restore_pre_current_kuser_state(void)
     }
 
     linuwux_current_kuser_snapshot_valid = 0;
+    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [kuser] pre-current state restored\n");
 }
 
 static void patch_kuser_shared_data(void)
@@ -254,6 +295,8 @@ static void patch_kuser_shared_data(void)
 
     *(UINT32 *)(kuser + 0xFFC) = 0x13371337;
 
+    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [kuser] current profile applied\n");
+
     /* Patch usage of syscalls:
      * 0 = syscalls take slow route, everything gets hooked
      * 1 = syscalls take fast route unless ntdll.dll gets modified (default)
@@ -282,7 +325,10 @@ static void linuwux_prepare_kuser_write_alias(void)
 static inline void linuwux_enable_syscall_slow_route(void)
 {
     if (linuwux_kuser_write_alias)
+    {
         linuwux_kuser_write_alias->SystemCall = 0;
+        LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [syscall] slow route enabled\n");
+    }
 }
 
 /**
@@ -330,6 +376,8 @@ static void patch_legacy_kuser_shared_data(void)
 
     *(UINT64 *)(kuser + 0x378) = UINT64_C(0x0000000100000000);
     *(UINT64 *)(kuser + 0x3c0) = UINT64_C(0x0083000100000010);
+
+    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [kuser] legacy profile applied\n");
 }
 
 /*
@@ -424,6 +472,8 @@ static inline void linuwux_commit_pending_current_route(void)
 
     linuwux_router.pending_336933_target = 0;
     linuwux_router.pending_336933_valid = 0;
+
+    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [router] pending -> current\n");
 }
 
 
@@ -441,6 +491,8 @@ static inline void linuwux_resolve_pending_legacy_route(void)
 
     linuwux_router.pending_336933_target = 0;
     linuwux_router.pending_336933_valid = 0;
+
+    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [router] pending -> legacy QSI\n");
 }
 
 
@@ -468,7 +520,11 @@ static void linuwux_activate_legacy_protocol(void)
      * legacy-profile event.
      */
     if (!was_legacy)
+    {
         MESSAGE("Activating legacy LinUwUx protocol\n");
+        LINUWUX_DEBUG_EVENT(
+            "LinUwUx DEBUG [router] legacy activated\n");
+    }
 }
 
 static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
@@ -598,6 +654,9 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
 
                     linuwux_router.pending_336933_valid = 1;
 
+                    LINUWUX_DEBUG_EVENT(
+                        "LinUwUx DEBUG [router] pending 336933 registered\n");
+
                     /*
                      * Pending CURRENT-visible state.
                      *
@@ -637,6 +696,9 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
 
                 linuwux_protocol_flags |=
                     LINUWUX_PROTOCOL_LEGACY_OBSERVED;
+
+                LINUWUX_DEBUG_EVENT(
+                    "LinUwUx DEBUG [router] legacy observed\n");
 
                 goto native_cpuid;
 
