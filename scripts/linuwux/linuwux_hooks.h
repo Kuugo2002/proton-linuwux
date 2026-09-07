@@ -84,6 +84,148 @@ static inline void linuwux_debug_event(const char *message, size_t length)
     }
 }
 
+#define LINUWUX_DEBUG_OBS_MAX 32
+
+/*
+ * Fixed-size, signal-safe diagnostic deduplication table.
+ *
+ * Each observation is reduced to a non-zero 32-bit fingerprint derived
+ * from its type and values. Slots are claimed atomically so concurrent
+ * signal handlers cannot race on partially-written observation records.
+ *
+ * Once the bounded table is full, further diagnostic observations are
+ * silently suppressed. Diagnostics must never influence runtime behavior.
+ */
+static unsigned int
+    linuwux_debug_observation_fingerprints[LINUWUX_DEBUG_OBS_MAX];
+
+static inline uint32_t linuwux_debug_hash_byte(uint32_t hash,
+                                               unsigned char value)
+{
+    hash ^= value;
+    hash *= UINT32_C(16777619);
+    return hash;
+}
+
+static inline uint32_t linuwux_debug_observation_fingerprint(
+    const char *type, uint64_t value1, uint64_t value2)
+{
+    uint32_t hash = UINT32_C(2166136261);
+    unsigned int i;
+
+    while (*type)
+        hash = linuwux_debug_hash_byte(hash, (unsigned char)*type++);
+
+    for (i = 0; i < 8; ++i)
+    {
+        hash = linuwux_debug_hash_byte(hash, (unsigned char)value1);
+        value1 >>= 8;
+    }
+
+    for (i = 0; i < 8; ++i)
+    {
+        hash = linuwux_debug_hash_byte(hash, (unsigned char)value2);
+        value2 >>= 8;
+    }
+
+    /* Zero means an unused slot. */
+    if (!hash)
+        hash = 1;
+
+    return hash;
+}
+
+static inline int linuwux_debug_observation_seen(const char *type,
+                                                 uint64_t value1,
+                                                 uint64_t value2)
+{
+    uint32_t fingerprint =
+        linuwux_debug_observation_fingerprint(type, value1, value2);
+    unsigned int i;
+
+    for (i = 0; i < LINUWUX_DEBUG_OBS_MAX; ++i)
+    {
+        unsigned int observed = __atomic_load_n(
+            &linuwux_debug_observation_fingerprints[i],
+            __ATOMIC_RELAXED);
+
+        if (observed == fingerprint)
+            return 1;
+
+        if (!observed)
+        {
+            unsigned int expected = 0;
+
+            if (__atomic_compare_exchange_n(
+                    &linuwux_debug_observation_fingerprints[i],
+                    &expected,
+                    fingerprint,
+                    0,
+                    __ATOMIC_RELAXED,
+                    __ATOMIC_RELAXED))
+                return 0;
+
+            if (expected == fingerprint)
+                return 1;
+        }
+    }
+
+    return 1;
+}
+
+static inline char *linuwux_debug_append_hex64(char *p, uint64_t value)
+{
+    static const char hex[] = "0123456789abcdef";
+    int shift;
+
+    *p++ = '0';
+    *p++ = 'x';
+
+    for (shift = 60; shift >= 0; shift -= 4)
+        *p++ = hex[(value >> shift) & 0xf];
+
+    return p;
+}
+
+static inline void linuwux_debug_observation(const char *type,
+                                             uint64_t value1,
+                                             uint64_t value2)
+{
+    char buffer[192];
+    char *p = buffer;
+    const char *s;
+    int saved_errno;
+
+    if (!linuwux_debug_enabled)
+        return;
+
+    if (linuwux_debug_observation_seen(type, value1, value2))
+        return;
+
+    saved_errno = errno;
+
+    for (s = "LinUwUx DEBUG [observation] "; *s; ++s)
+        *p++ = *s;
+
+    for (s = type; *s && p < buffer + sizeof(buffer) - 64; ++s)
+        *p++ = *s;
+
+    for (s = " value1="; *s; ++s)
+        *p++ = *s;
+
+    p = linuwux_debug_append_hex64(p, value1);
+
+    for (s = " value2="; *s; ++s)
+        *p++ = *s;
+
+    p = linuwux_debug_append_hex64(p, value2);
+    *p++ = '\n';
+
+    (void)write(STDERR_FILENO, buffer, p - buffer);
+
+    errno = saved_errno;
+}
+
 #define LINUWUX_DEBUG_EVENT(message) \
     linuwux_debug_event((message), sizeof(message) - 1)
 
@@ -767,6 +909,22 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 __attribute__((fallthrough));
 
             default:
+                /*
+                 * The historical LinUwUx protocol uses several CPUID
+                 * control leaves in the 0x3369xx range.  Unknown values
+                 * in that range are observational only: preserve native
+                 * CPUID behavior while making new protocol-like inputs
+                 * visible to optional diagnostics.
+                 */
+                if ((leaf & UINT64_C(0xffffff00)) ==
+                    UINT64_C(0x336900))
+                {
+                    linuwux_debug_observation(
+                        "unknown-3369-control-leaf",
+                        leaf,
+                        subleaf);
+                }
+
 native_cpuid:
                 syscall(SYS_arch_prctl, ARCH_SET_CPUID, 1);
 
