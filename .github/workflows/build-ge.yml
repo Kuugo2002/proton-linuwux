@@ -226,5 +226,7 @@ jobs:
           path: |
             build-ge.log
             work/proton-ge-custom/patchlog.txt
+            linuwux-diagnose-ge-source.log
+            linuwux-diagnose-ge-after-apply.log
           if-no-files-found: warn
           retention-days: 7

@@ -116,9 +116,47 @@ then
     exit 1
 fi
 
-bash "$LINUWUX_APPLY" "$PWD"
+LINUWUX_DIAGNOSE="$ROOT_DIR/scripts/linuwux/diagnose.py"
+LINUWUX_DIAGNOSE_SOURCE_LOG="$ROOT_DIR/linuwux-diagnose-ge-source.log"
+LINUWUX_DIAGNOSE_AFTER_APPLY_LOG="$ROOT_DIR/linuwux-diagnose-ge-after-apply.log"
 
-echo "LinUwUx rework applicato correttamente."
+run_linuwux_diagnose()
+{
+    local stage="$1"
+    local log="$2"
+
+    if [[ ! -f "$LINUWUX_DIAGNOSE" ]]
+    then
+        echo "Avviso: diagnostica LinUwUx non trovata: $LINUWUX_DIAGNOSE" >&2
+        return 0
+    fi
+
+    python3 "$LINUWUX_DIAGNOSE" \
+        --source-tree "$PWD" \
+        --stage "$stage" \
+        2>&1 | tee "$log" || true
+}
+
+echo "== Diagnostica LinUwUx pre-apply =="
+
+run_linuwux_diagnose source "$LINUWUX_DIAGNOSE_SOURCE_LOG"
+
+if bash "$LINUWUX_APPLY" "$PWD"
+then
+    echo "LinUwUx rework applicato correttamente."
+
+    echo "== Diagnostica LinUwUx post-apply =="
+    run_linuwux_diagnose post-apply "$LINUWUX_DIAGNOSE_AFTER_APPLY_LOG"
+else
+    apply_status=$?
+
+    echo "Errore: applicazione LinUwUx fallita con status $apply_status." >&2
+    echo "== Diagnostica LinUwUx dopo il fallimento di apply.sh =="
+
+    run_linuwux_diagnose auto "$LINUWUX_DIAGNOSE_AFTER_APPLY_LOG"
+
+    exit "$apply_status"
+fi
 
 echo "== Configurazione build =="
 

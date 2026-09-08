@@ -218,3 +218,14 @@ jobs:
               --notes "$notes" \
               --latest
           fi
+
+      - name: Upload diagnostic logs
+        if: always() && steps.release-check.outputs.should-build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proton-CachyOS-build-logs
+          path: |
+            linuwux-diagnose-cachyos-source.log
+            linuwux-diagnose-cachyos-after-apply.log
+          if-no-files-found: warn
+          retention-days: 7
