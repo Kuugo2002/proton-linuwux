@@ -225,6 +225,7 @@ jobs:
         with:
           name: Proton-CachyOS-build-logs
           path: |
+            build-cachyos.log
             linuwux-diagnose-cachyos-source.log
             linuwux-diagnose-cachyos-after-apply.log
           if-no-files-found: warn

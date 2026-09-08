@@ -178,7 +178,7 @@ echo "== Configurazione Proton-CachyOS =="
 
 echo "== Compilazione Proton-CachyOS =="
 
-make redist
+make redist 2>&1 | tee "$ROOT_DIR/build-cachyos.log"
 
 echo "== Creazione archivio finale =="
 
