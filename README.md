@@ -3,26 +3,19 @@
 </p>
 
 <p align="center">
-  Automated Proton-GE and Proton-CachyOS builds patched with <strong>LinUwUx.patch</strong>.
+  Proton-GE and Proton-CachyOS builds integrating the <strong>LinUwUx Rework</strong> compatibility layer.
 </p>
 
 <p align="center">
-  <a href="https://github.com/xshaduwulfx/proton-linuwux/releases">
-    <img src="https://img.shields.io/github/v/release/xshaduwulfx/proton-linuwux?label=Latest%20Version" alt="Latest Version">
-  </a>
-  <a href="https://github.com/xshaduwulfx/proton-linuwux/actions/workflows/build-ge.yml">
-    <img src="https://github.com/xshaduwulfx/proton-linuwux/actions/workflows/build-ge.yml/badge.svg" alt="Proton-GE Build">
-  </a>
-  <a href="https://github.com/xshaduwulfx/proton-linuwux/actions/workflows/build-cachyos.yml">
-    <img src="https://github.com/xshaduwulfx/proton-linuwux/actions/workflows/build-cachyos.yml/badge.svg" alt="Proton-CachyOS Build">
-  </a>
-  <a href="https://github.com/xshaduwulfx/proton-linuwux/stargazers">
-    <img src="https://img.shields.io/github/stars/xshaduwulfx/proton-linuwux?style=flat" alt="GitHub Stars">
-  </a>
+  <a href="https://codeberg.org/xshaduwulfx/proton-linuwux/releases"><strong>Releases</strong></a>
+  ·
+  <a href="https://sourceforge.net/projects/proton-linuwux/files/"><strong>Binary Downloads</strong></a>
+  ·
+  <a href="https://t.me/+EdH8jcUUzcA2MmFk"><strong>Support</strong></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/xshaduwulfx/proton-linuwux/releases">Downloads</a>
+  <a href="#downloads">Downloads</a>
   ·
   <a href="#features">Features</a>
   ·
@@ -35,53 +28,60 @@
 
 ## About
 
-**Proton-LinUwUx** provides automated x86_64 builds of Proton-GE and Proton-CachyOS patched with `LinUwUx.patch`.
+**Proton-LinUwUx** provides x86_64 builds of Proton-GE and Proton-CachyOS integrating the **LinUwUx Rework** compatibility layer.
 
-`LinUwUx.patch` is developed and maintained by **LinUwUx**.  
-This project only automates the build and distribution of Proton-GE and Proton-CachyOS with the original patch applied.
+The project is built on the original LinUwUx patch and the work of its developer, **LinUwUx**, whose implementation provides the foundation for the compatibility behavior preserved by this project.
 
-The patch originates from the relevant discussion on [cs.rin.ru](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989).
+The current **LinUwUx Rework** does not replace that work; it restructures and extends it into a more modular, robust and maintainable compatibility layer, with the goal of preserving the original LinUwUx behavior while making the integration easier to adapt to future Proton/Wine changes, runtime protocol variants and upstream structural changes.
+
+The original patch and the related discussion can be found on [cs.rin.ru](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989).
 
 > [!NOTE]
-> This project depends on maintaining patched Proton builds and may become outdated as Proton and Wine evolve.
-> Users looking for an alternative approach may want to consider [Shaduwulf's LinUwUx Runtime](https://github.com/xshaduwulfx/shaduwulf-linuwux-runtime), a standalone runtime implementation that does not require a patched Proton build.
+> Proton and Wine continue to evolve, so compatibility with future upstream releases may require maintenance updates. The project is currently at a stable milestone, with future work focused primarily on compatibility with new Proton/Wine versions, regressions and reported issues.
 
 > [!IMPORTANT]
-> These builds contain no additional performance tweaks or unrelated changes.  
-> The only project-specific modification is the application of the original `LinUwUx.patch` developed by **LinUwUx**.
+> These builds do not add unrelated performance tweaks. Project-specific changes are limited to the LinUwUx compatibility layer, its integration and the diagnostics required to maintain and troubleshoot it.
 
 ## Features
 
-- Automatically tracks new upstream Proton-GE and Proton-CachyOS releases.
-- Builds and publishes patched releases through GitHub Actions.
-- Provides ready-to-use x86_64 archives.
-- Keeps Proton-GE and Proton-CachyOS as separate release variants.
-- Allows manual workflow runs when a rebuild is required.
+- Supports Proton-GE and Proton-CachyOS as separate release variants.
+- Provides ready-to-use x86_64 compatibility-tool archives.
+- Includes automation for applying the LinUwUx Rework and building supported Proton/Wine trees.
+- Includes structural diagnostics to help identify upstream changes that may break the automation.
+- Includes optional `LINUWUX_DEBUG=1` runtime diagnostics for compatibility and regression troubleshooting.
 
 ## Available builds
 
 | Build | Upstream project | Architecture | Description |
 |---|---|---:|---|
-| **Proton-GE LinUwUx** | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) | x86_64 | Latest supported Proton-GE release patched with `LinUwUx.patch`. |
-| **Proton-CachyOS LinUwUx** | [CachyOS/proton-cachyos](https://github.com/CachyOS/proton-cachyos) | x86_64 | Latest supported Proton-CachyOS release patched with `LinUwUx.patch`. |
+| **Proton-GE LinUwUx** | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) | x86_64 | Supported Proton-GE release integrating the LinUwUx Rework. |
+| **Proton-CachyOS LinUwUx** | [CachyOS/proton-cachyos](https://github.com/CachyOS/proton-cachyos) | x86_64 | Supported Proton-CachyOS release integrating the LinUwUx Rework. |
 
 ## Downloads
 
-Ready-to-use builds are available from the project’s:
+Release information is published on:
 
 <p align="center">
   <strong>
-    <a href="https://github.com/xshaduwulfx/proton-linuwux/releases">GitHub Releases</a>
+    <a href="https://codeberg.org/xshaduwulfx/proton-linuwux/releases">Codeberg Releases</a>
   </strong>
 </p>
 
-Each release archive contains a complete compatibility-tool directory that can be extracted into a supported Steam compatibility-tools location.
+Binary archives are hosted on:
+
+<p align="center">
+  <strong>
+    <a href="https://sourceforge.net/projects/proton-linuwux/files/">SourceForge</a>
+  </strong>
+</p>
+
+Each binary archive is accompanied by a `.sha256` checksum file and contains a complete compatibility-tool directory that can be extracted into a supported compatibility-tools location.
 
 ## Installation
 
 ### Steam
 
-1. Download the desired archive from [GitHub Releases](https://github.com/xshaduwulfx/proton-linuwux/releases).
+1. Download the desired archive through [Codeberg Releases](https://codeberg.org/xshaduwulfx/proton-linuwux/releases).
 2. Extract it into one of the following directories:
 
    ```text
@@ -98,7 +98,7 @@ Each release archive contains a complete compatibility-tool directory that can b
 
 ### Heroic Games Launcher
 
-1. Download the desired archive from **GitHub Releases**.
+1. Download the desired archive through **Codeberg Releases**.
 
 2. Extract the Proton-LinUwUx directory into the appropriate Heroic Proton directory:
 
@@ -130,7 +130,7 @@ Each release archive contains a complete compatibility-tool directory that can b
 
 ### Lutris
 
-1. Download the desired archive from [GitHub Releases](../../releases).
+1. Download the desired archive through [Codeberg Releases](https://codeberg.org/xshaduwulfx/proton-linuwux/releases).
 
 2. Extract the Proton-LinUwUx directory into the Lutris custom Wine runners directory:
 
@@ -228,11 +228,20 @@ Use these builds at your own risk.
 
 Modified compatibility tools or attempts to bypass anti-tamper systems may violate the terms of service of a game, platform or online service. Avoid using modified builds in competitive or anti-cheat-protected multiplayer environments.
 
-### How often are new releases checked?
+### How are new Proton/Wine releases handled?
 
-The GitHub Actions workflows check the upstream Proton-GE and Proton-CachyOS projects every hour.
+The project is currently at a stable milestone.
 
-When a new upstream release is detected and no corresponding Proton-LinUwUx release exists, the appropriate build workflow starts automatically.
+New Proton-GE, Proton-CachyOS and Wine releases are evaluated for compatibility with the LinUwUx Rework. The repository includes automation diagnostics intended to identify structural upstream changes quickly so the integration can be updated when required.
+
+## Support & Announcements
+
+For compatibility issues, regressions, build problems or troubleshooting:
+
+- **Support & Troubleshooting:** https://t.me/+EdH8jcUUzcA2MmFk
+- **Announcements:** https://t.me/protonlinuwux
+
+When reporting an issue, please include the Proton-LinUwUx build used, the affected game or application and any relevant logs. Runtime diagnostics can be enabled with `LINUWUX_DEBUG=1` when requested during troubleshooting.
 
 ## Disclaimer
 
