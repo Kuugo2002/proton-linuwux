@@ -1038,6 +1038,9 @@ static int linuwux_handle_sigsys(void *sigcontext)
     if (ctx->uc_mcontext.gregs[REG_RAX] == 0xffff)
         return 0;
 
+    if (ctx->uc_mcontext.gregs[REG_RAX] == 0x7fffffffffff)
+        return 0;
+
     /*
      * First routable SIGSYS resolves an ambiguous registration as CURRENT.
      * Pure state mutation only: no mmap/mprotect/sysconf/logging here.
@@ -1048,15 +1051,13 @@ static int linuwux_handle_sigsys(void *sigcontext)
         linuwux_router.qsi.syscall_id_valid &&
         linuwux_router.qsi.target != 0 &&
         syscall_id == linuwux_router.qsi.syscall_id &&
-        (uint64_t)ctx->uc_mcontext.gregs[REG_RCX] <= UINT64_C(0x7fffffffffff) &&
-        ctx->uc_mcontext.gregs[REG_R10] == 0)
+        ctx->uc_mcontext.gregs[REG_R10] <= 0)
         return linuwux_redirect_syscall(ctx, linuwux_router.qsi.target);
 
     if (linuwux_router.qfa.target_valid &&
         linuwux_router.qfa.syscall_id_valid &&
         linuwux_router.qfa.target != 0 &&
-        syscall_id == linuwux_router.qfa.syscall_id &&
-        (uint64_t)ctx->uc_mcontext.gregs[REG_RCX] <= UINT64_C(0x7fffffffffff))
+        syscall_id == linuwux_router.qfa.syscall_id)
         return linuwux_redirect_syscall(ctx, linuwux_router.qfa.target);
 
     if (linuwux_router.generic_target != 0)
