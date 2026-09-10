@@ -12,6 +12,7 @@
 #define LINUWUX_HOOKS_INCLUDED
 
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 #ifndef ARCH_SET_CPUID
@@ -56,32 +57,74 @@ static KUSER_SHARED_DATA *linuwux_kuser_write_alias;
  * use write(2) only and never influence protocol or routing decisions.
  */
 static volatile sig_atomic_t linuwux_debug_enabled;
+static int linuwux_debug_log_fd = -1;
+
+static inline void linuwux_debug_emit(const char *message, size_t length)
+{
+    int saved_errno;
+
+    if (!linuwux_debug_enabled || !length)
+        return;
+
+    saved_errno = errno;
+
+    if (linuwux_debug_log_fd >= 0)
+        (void)write(linuwux_debug_log_fd, message, length);
+
+    (void)write(STDERR_FILENO, message, length);
+
+    errno = saved_errno;
+}
 
 static void linuwux_debug_init(void)
 {
     const char *value = getenv("LINUWUX_DEBUG");
+    const char *path;
+    int saved_errno = errno;
 
     linuwux_debug_enabled =
         value && value[0] == '1' && value[1] == '\0';
 
-    if (linuwux_debug_enabled)
+    if (!linuwux_debug_enabled)
+    {
+        errno = saved_errno;
+        return;
+    }
+
+    path = getenv("LINUWUX_LOG");
+
+    if (path && path[0] != '\0')
+    {
+        static const char enabled_message[] =
+            "LinUwUx DEBUG [init] file logging enabled\n";
+        static const char failed_message[] =
+            "LinUwUx DEBUG [init] file logging unavailable\n";
+
+        linuwux_debug_log_fd =
+            open(path, O_WRONLY | O_CREAT | O_APPEND |
+                       O_CLOEXEC | O_NOFOLLOW, 0600);
+
+        if (linuwux_debug_log_fd >= 0)
+            linuwux_debug_emit(enabled_message,
+                               sizeof(enabled_message) - 1);
+        else
+            linuwux_debug_emit(failed_message,
+                               sizeof(failed_message) - 1);
+    }
+
     {
         static const char message[] =
             "LinUwUx DEBUG [init] enabled\n";
 
-        write(STDERR_FILENO, message, sizeof(message) - 1);
+        linuwux_debug_emit(message, sizeof(message) - 1);
     }
+
+    errno = saved_errno;
 }
 
 static inline void linuwux_debug_event(const char *message, size_t length)
 {
-    if (linuwux_debug_enabled)
-    {
-        int saved_errno = errno;
-
-        (void)write(STDERR_FILENO, message, length);
-        errno = saved_errno;
-    }
+    linuwux_debug_emit(message, length);
 }
 
 #define LINUWUX_DEBUG_OBS_MAX 32
@@ -221,7 +264,7 @@ static inline void linuwux_debug_observation(const char *type,
     p = linuwux_debug_append_hex64(p, value2);
     *p++ = '\n';
 
-    (void)write(STDERR_FILENO, buffer, p - buffer);
+    linuwux_debug_emit(buffer, p - buffer);
 
     errno = saved_errno;
 }
