@@ -795,8 +795,7 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
             case 1:
                 ucontext->uc_mcontext.gregs[REG_RAX] = spoof_leaf1_eax;
                 ucontext->uc_mcontext.gregs[REG_RBX] = spoof_leaf1_ebx;
-                ucontext->uc_mcontext.gregs[REG_RCX] =
-                spoof_leaf1_ecx | (linuwux_router.generic_target ? 0 : (1u << 31));
+                ucontext->uc_mcontext.gregs[REG_RCX] = spoof_leaf1_ecx;
                 ucontext->uc_mcontext.gregs[REG_RDX] = spoof_leaf1_edx;
                 break;
 
