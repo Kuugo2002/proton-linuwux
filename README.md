@@ -178,15 +178,9 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
 
 ## FAQ
 
-### How does the Hypervisor (HV) bypass work? What are the requirements? What additional components are required besides these patched Proton builds?
+### How does the Hypervisor (HV) bypass work?
 
-**These patched Proton builds are a required part of the setup, but they are not the complete solution.**
-
-This repository only builds and distributes the patched Proton variants required for the HV bypass to work properly. The HV bypass itself, its configuration, additional requirements, and the overall setup are **outside the scope of this project**.
-
-If you're looking for information about the complete setup, requirements, compatibility or troubleshooting, please refer to the dedicated **[cs.rin.ru discussion thread](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)**.
-
-For questions regarding the HV bypass itself or its setup, please use the discussion thread above rather than opening an issue in this repository.
+For information about the HV bypass, its requirements, setup and compatibility, please refer to the dedicated **[cs.rin.ru discussion thread](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)**.
 
 ### What is the difference between Proton-CachyOS and Proton-GE?
 
@@ -215,12 +209,6 @@ Do not attempt to install it into a read-only system directory such as `/usr/sha
 No. Translators such as FEX-Emu do not currently provide all the required behavior, including `cpuid_fault` support, and user-mode emulation cannot reproduce every property checked by some protection systems.
 
 These builds target **x86_64 Linux systems only**.
-
-### Does it work with every Denuvo-protected game?
-
-No compatibility guarantee can be made.
-
-The patch targets hypervisor-related checks, but results depend on the game, its protection version and any game-specific requirements. Consult the original [cs.rin.ru discussion](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989) and the relevant game thread for additional information.
 
 ### Is there a risk of being banned?
 
