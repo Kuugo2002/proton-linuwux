@@ -247,6 +247,16 @@ static unsigned int spoof_leaf1_ebx;
 static unsigned int spoof_leaf1_ecx;
 static unsigned int spoof_leaf1_edx;
 
+enum linuwux_cpu_vendor
+{
+    LINUWUX_CPU_VENDOR_UNKNOWN,
+    LINUWUX_CPU_VENDOR_INTEL,
+    LINUWUX_CPU_VENDOR_AMD
+};
+
+static enum linuwux_cpu_vendor linuwux_host_cpu_vendor =
+    LINUWUX_CPU_VENDOR_UNKNOWN;
+
 /**
  * Patch KUSER_SHARED_DATA with spoofed values.
  */
@@ -550,6 +560,7 @@ static void detect_cpu_vendor(void)
     if (ebx == 0x756E6547 && edx == 0x49656E69 && ecx == 0x6C65746E)
     {
         /* GenuineIntel */
+        linuwux_host_cpu_vendor = LINUWUX_CPU_VENDOR_INTEL;
         spoof_leaf1_eax = 0x000A0655;
         spoof_leaf1_ebx = 0x00200800;
 
@@ -573,6 +584,7 @@ static void detect_cpu_vendor(void)
     else if (ebx == 0x68747541 && edx == 0x69746E65 && ecx == 0x444D4163)
     {
         /* AuthenticAMD */
+        linuwux_host_cpu_vendor = LINUWUX_CPU_VENDOR_AMD;
         spoof_leaf1_eax = 0x00A20F12;
         spoof_leaf1_ebx = 0x00100800;
 
@@ -684,31 +696,74 @@ static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
     switch (leaf)
     {
         case 1:
-            ucontext->uc_mcontext.gregs[REG_RAX] = 0x00a20f10;
-            ucontext->uc_mcontext.gregs[REG_RBX] = 0x00180800;
-            ucontext->uc_mcontext.gregs[REG_RCX] = 0x7ad8320b;
-            ucontext->uc_mcontext.gregs[REG_RDX] = 0x178bfbff;
+            if (linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_INTEL)
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x000a0655;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x00200800;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x7bfafbff;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0xbfebfbff;
+            }
+            else
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x00a20f10;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x00180800;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x7ad8320b;
+                ucontext->uc_mcontext.gregs[REG_RDX] =
+                    linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_AMD
+                        ? 0x178bfbff
+                        : 0x00000000;
+            }
             return 1;
 
         case 0x80000002:
-            ucontext->uc_mcontext.gregs[REG_RAX] = 0x20444d41;
-            ucontext->uc_mcontext.gregs[REG_RBX] = 0x657a7952;
-            ucontext->uc_mcontext.gregs[REG_RCX] = 0x2039206e;
-            ucontext->uc_mcontext.gregs[REG_RDX] = 0x30303935;
+            if (linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_INTEL)
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x65746e49;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x2952286c;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x726f4320;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0x4d542865;
+            }
+            else
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x20444d41;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x657a7952;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x2039206e;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0x30303935;
+            }
             return 1;
 
         case 0x80000003:
-            ucontext->uc_mcontext.gregs[REG_RAX] = 0x32312058;
-            ucontext->uc_mcontext.gregs[REG_RBX] = 0x726f432d;
-            ucontext->uc_mcontext.gregs[REG_RCX] = 0x72502065;
-            ucontext->uc_mcontext.gregs[REG_RDX] = 0x7365636f;
+            if (linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_INTEL)
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x39692029;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x3930312d;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x204b3030;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0x20555043;
+            }
+            else
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x32312058;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x726f432d;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x72502065;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0x7365636f;
+            }
             return 1;
 
         case 0x80000004:
-            ucontext->uc_mcontext.gregs[REG_RAX] = 0x20726f73;
-            ucontext->uc_mcontext.gregs[REG_RBX] = 0x20202020;
-            ucontext->uc_mcontext.gregs[REG_RCX] = 0x20202020;
-            ucontext->uc_mcontext.gregs[REG_RDX] = 0x00202020;
+            if (linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_INTEL)
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x2e332040;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x48473037;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x2020207a;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0x00202020;
+            }
+            else
+            {
+                ucontext->uc_mcontext.gregs[REG_RAX] = 0x20726f73;
+                ucontext->uc_mcontext.gregs[REG_RBX] = 0x20202020;
+                ucontext->uc_mcontext.gregs[REG_RCX] = 0x20202020;
+                ucontext->uc_mcontext.gregs[REG_RDX] = 0x00202020;
+            }
             return 1;
 
         default:
