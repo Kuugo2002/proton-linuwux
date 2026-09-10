@@ -112,6 +112,14 @@ static void linuwux_debug_init(void)
                                sizeof(failed_message) - 1);
     }
 
+    if (!linuwux_kuser_write_alias)
+    {
+        static const char message[] =
+            "LinUwUx DEBUG [init] KUSER write alias unavailable\n";
+
+        linuwux_debug_emit(message, sizeof(message) - 1);
+    }
+
     {
         static const char message[] =
             "LinUwUx DEBUG [init] enabled\n";
