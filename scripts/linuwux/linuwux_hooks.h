@@ -366,6 +366,7 @@ static void linuwux_snapshot_current_kuser_state(void)
 static void linuwux_restore_pre_current_kuser_state(void)
 {
     UINT8 *kuser = (UINT8 *)0x000000007FFE0000UL;
+    long page_size_result;
     size_t page_size;
     void *page_start;
     size_t i;
@@ -373,14 +374,28 @@ static void linuwux_restore_pre_current_kuser_state(void)
     if (!linuwux_current_kuser_snapshot_valid)
         return;
 
-    page_size = sysconf(_SC_PAGESIZE);
+    page_size_result = sysconf(_SC_PAGESIZE);
+    if (page_size_result == -1)
+        linuwux_debug_observation(
+            "kuser-page-size-query-failed",
+            UINT64_C(1),
+            (uint64_t)errno);
+
+    page_size = (size_t)page_size_result;
     page_start =
         (void *)((uintptr_t)0x000000007FFE0000UL & ~(page_size - 1));
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE) == -1)
     {
+        int call_errno = errno;
+
+        linuwux_debug_observation(
+            "kuser-mprotect-failed",
+            UINT64_C(1),
+            (uint64_t)call_errno);
+
         MESSAGE("Failed to restore pre-current KUSER state: %s\n",
-                strerror(errno));
+                strerror(call_errno));
         return;
     }
 
@@ -401,12 +416,31 @@ static void patch_kuser_shared_data(void)
     UINT8 *kuser = (UINT8 *)0x000000007FFE0000UL;
 
     /* Make memory writable. */
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    void *page_start = (void *)((uintptr_t)0x000000007FFE0000UL & ~(page_size - 1));
+    long page_size_result = sysconf(_SC_PAGESIZE);
+    size_t page_size;
+    void *page_start;
+
+    if (page_size_result == -1)
+        linuwux_debug_observation(
+            "kuser-page-size-query-failed",
+            UINT64_C(2),
+            (uint64_t)errno);
+
+    page_size = (size_t)page_size_result;
+    page_start =
+        (void *)((uintptr_t)0x000000007FFE0000UL & ~(page_size - 1));
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE) == -1)
     {
-        MESSAGE("Failed to make kuser_shared_data writable: %s\n", strerror(errno));
+        int call_errno = errno;
+
+        linuwux_debug_observation(
+            "kuser-mprotect-failed",
+            UINT64_C(2),
+            (uint64_t)call_errno);
+
+        MESSAGE("Failed to make kuser_shared_data writable: %s\n",
+                strerror(call_errno));
         return;
     }
 
@@ -520,8 +554,18 @@ static inline void linuwux_enable_syscall_slow_route(void)
 static void patch_legacy_kuser_shared_data(void)
 {
     UINT8 *kuser = (UINT8 *)0x000000007FFE0000UL;
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    void *page_start =
+    long page_size_result = sysconf(_SC_PAGESIZE);
+    size_t page_size;
+    void *page_start;
+
+    if (page_size_result == -1)
+        linuwux_debug_observation(
+            "kuser-page-size-query-failed",
+            UINT64_C(3),
+            (uint64_t)errno);
+
+    page_size = (size_t)page_size_result;
+    page_start =
         (void *)((uintptr_t)0x000000007FFE0000UL & ~(page_size - 1));
 
     static const UINT8 legacy_260_27a[] =
@@ -545,8 +589,15 @@ static void patch_legacy_kuser_shared_data(void)
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE) == -1)
     {
+        int call_errno = errno;
+
+        linuwux_debug_observation(
+            "kuser-mprotect-failed",
+            UINT64_C(3),
+            (uint64_t)call_errno);
+
         MESSAGE("Failed to make legacy kuser_shared_data writable: %s\n",
-                strerror(errno));
+                strerror(call_errno));
         return;
     }
 
