@@ -1014,19 +1014,38 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 }
 
 native_cpuid:
-                syscall(SYS_arch_prctl, ARCH_SET_CPUID, 1);
+                {
+                    long result;
+                    int call_errno;
 
-                __asm__ volatile(
-                    "cpuid"
-                    : "=a"(ucontext->uc_mcontext.gregs[REG_RAX]),
-                                 "=b"(ucontext->uc_mcontext.gregs[REG_RBX]),
-                                 "=c"(ucontext->uc_mcontext.gregs[REG_RCX]),
-                                 "=d"(ucontext->uc_mcontext.gregs[REG_RDX])
-                                 : "a"(leaf), "c"(subleaf)
-                                 : "memory"
-                );
+                    result = syscall(SYS_arch_prctl, ARCH_SET_CPUID, 1);
+                    call_errno = errno;
 
-                syscall(SYS_arch_prctl, ARCH_SET_CPUID, 0);
+                    if (result == -1)
+                        linuwux_debug_observation(
+                            "arch-set-cpuid-enable-failed",
+                            (uint64_t)call_errno,
+                            (uint64_t)result);
+
+                    __asm__ volatile(
+                        "cpuid"
+                        : "=a"(ucontext->uc_mcontext.gregs[REG_RAX]),
+                                     "=b"(ucontext->uc_mcontext.gregs[REG_RBX]),
+                                     "=c"(ucontext->uc_mcontext.gregs[REG_RCX]),
+                                     "=d"(ucontext->uc_mcontext.gregs[REG_RDX])
+                                     : "a"(leaf), "c"(subleaf)
+                                     : "memory"
+                    );
+
+                    result = syscall(SYS_arch_prctl, ARCH_SET_CPUID, 0);
+                    call_errno = errno;
+
+                    if (result == -1)
+                        linuwux_debug_observation(
+                            "arch-set-cpuid-rearm-failed",
+                            (uint64_t)call_errno,
+                            (uint64_t)result);
+                }
                 break;
         }
 
