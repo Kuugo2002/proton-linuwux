@@ -538,8 +538,64 @@ class Diagnostics:
         wine_inf = contents[self.wine_inf]
         proton = contents[self.proton]
 
+        hooks = None
+
         if self.hooks.is_file():
             self.pass_("LinUwUx hooks installed", str(self.hooks))
+            hooks = self.read(self.hooks)
+
+            if hooks is None:
+                self.fail(
+                    "Readable LinUwUx hooks",
+                    f"unable to read: {self.hooks}",
+                    self.hooks,
+                )
+            else:
+                for needle, description in (
+                    (
+                        'getenv("LINUWUX_DEBUG")',
+                        "LinUwUx debug enable control",
+                    ),
+                    (
+                        'getenv("LINUWUX_LOG")',
+                        "LinUwUx debug file logging",
+                    ),
+                    (
+                        "#define LINUWUX_DEBUG_OBS_MAX 32",
+                        "Bounded LinUwUx observation table",
+                    ),
+                    (
+                        "arch-set-cpuid-enable-failed",
+                        "CPUID enable failure diagnostic",
+                    ),
+                    (
+                        "arch-set-cpuid-rearm-failed",
+                        "CPUID re-arm failure diagnostic",
+                    ),
+                    (
+                        "kuser-page-size-query-failed",
+                        "KUSER page-size failure diagnostic",
+                    ),
+                    (
+                        "kuser-mprotect-failed",
+                        "KUSER mprotect failure diagnostic",
+                    ),
+                    (
+                        "faketime-server-call-failed",
+                        "Faketime server failure diagnostic",
+                    ),
+                    (
+                        "KUSER write alias unavailable",
+                        "KUSER write-alias failure diagnostic",
+                    ),
+                ):
+                    self.expect_present(
+                        self.hooks,
+                        hooks,
+                        needle,
+                        description,
+                        needle,
+                    )
         else:
             self.fail(
                 "LinUwUx hooks installed",
@@ -587,6 +643,30 @@ class Diagnostics:
                 needle,
                 description,
                 needle.split("(")[0],
+            )
+
+        init_markers = (
+            "detect_cpu_vendor();",
+            "linuwux_prepare_kuser_write_alias();",
+            "linuwux_debug_init();",
+            "syscall(SYS_arch_prctl, ARCH_SET_CPUID, 0);",
+        )
+        init_positions = tuple(signal.find(marker) for marker in init_markers)
+
+        if (
+            all(position >= 0 for position in init_positions)
+            and init_positions == tuple(sorted(init_positions))
+        ):
+            self.pass_("LinUwUx initialization order")
+        else:
+            self.fail(
+                "LinUwUx initialization order",
+                f"positions={init_positions}",
+                self.signal,
+                "detect_cpu_vendor();",
+                "linuwux_prepare_kuser_write_alias();",
+                "linuwux_debug_init();",
+                "ARCH_SET_CPUID",
             )
 
         self.expect_present(
