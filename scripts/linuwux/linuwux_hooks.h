@@ -494,10 +494,15 @@ static void patch_legacy_kuser_shared_data(void)
         0x00, 0x00, 0x01
     };
 
-    static const UINT8 legacy_281_28f[] =
+    static const UINT8 legacy_281_284[] =
     {
-        0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01,
-        0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00
+        0x01, 0x01, 0x00, 0x00
+    };
+
+    static const UINT8 legacy_286_28f[] =
+    {
+        0x00, 0x00, 0x01, 0x01, 0x01,
+        0x01, 0x00, 0x00, 0x00, 0x00
     };
 
     if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE) == -1)
@@ -510,7 +515,8 @@ static void patch_legacy_kuser_shared_data(void)
     *(UINT64 *)(kuser + 0x000) = UINT64_C(0x0fa0000000000000);
 
     memcpy(kuser + 0x260, legacy_260_27a, sizeof(legacy_260_27a));
-    memcpy(kuser + 0x281, legacy_281_28f, sizeof(legacy_281_28f));
+    memcpy(kuser + 0x281, legacy_281_284, sizeof(legacy_281_284));
+    memcpy(kuser + 0x286, legacy_286_28f, sizeof(legacy_286_28f));
 
     *(UINT64 *)(kuser + 0x2d0) = UINT64_C(0x00320a0000000110);
     *(UINT64 *)(kuser + 0x2e8) = UINT64_C(0x00000100007fb10b);
