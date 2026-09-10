@@ -36,6 +36,9 @@ The current **LinUwUx Rework** does not replace that work; it restructures and e
 
 The original patch and the related discussion can be found on [cs.rin.ru](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989).
 
+> [!TIP]
+> **LinUwUx Runtime:** Also consider the work by **LinUwUx, brcly, xXJSONDeruloXx and the other contributors to the LinUwUx Runtime**. It brings the same underlying compatibility concept outside of modified Proton builds, providing a more independent and inherently robust approach. Proton-LinUwUx is maintained alongside it as both an alternative implementation and a fallback, preserving the patched-Proton approach and giving users the freedom to choose whichever solution better suits their setup and preferences.
+
 > [!NOTE]
 > Proton and Wine continue to evolve, so compatibility with future upstream releases may require maintenance updates. The project is currently at a stable milestone, with future work focused primarily on compatibility with new Proton/Wine versions, regressions and reported issues.
 
