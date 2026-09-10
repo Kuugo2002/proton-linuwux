@@ -1018,8 +1018,16 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                         ucontext->uc_mcontext.gregs[REG_RCX]);
                 SERVER_START_REQ( set_faketime )
                 {
+                    unsigned int status;
+
                     req->faketime = ucontext->uc_mcontext.gregs[REG_RCX];
-                    wine_server_call( req );
+                    status = wine_server_call( req );
+
+                    if (status)
+                        linuwux_debug_observation(
+                            "faketime-server-call-failed",
+                            (uint64_t)status,
+                            UINT64_C(0));
                 }
                 SERVER_END_REQ;
                 linuwux_zero_cpuid_result(ucontext);
