@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://codeberg.org/xshaduwulfx/proton-linuwux/releases"><strong>Releases</strong></a>
+  <a href="#downloads"><strong>Releases</strong></a>
   ·
   <a href="https://sourceforge.net/projects/proton-linuwux/files/"><strong>Binary Downloads</strong></a>
   ·
@@ -67,6 +67,8 @@ Release information is published on:
 <p align="center">
   <strong>
     <a href="https://codeberg.org/xshaduwulfx/proton-linuwux/releases">Codeberg Releases</a>
+    ·
+    <a href="https://github.com/xshaduwulfx/proton-linuwux/releases">GitHub Releases</a>
   </strong>
 </p>
 
