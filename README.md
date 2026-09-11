@@ -86,7 +86,7 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
 
 ### Steam
 
-1. Download the desired archive through [Codeberg Releases](https://codeberg.org/xshaduwulfx/proton-linuwux/releases).
+1. Download the desired archive through [Releases](/xshaduwulfx/proton-linuwux/releases).
 2. Extract it into one of the following directories:
 
    ```text
@@ -103,7 +103,7 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
 
 ### Heroic Games Launcher
 
-1. Download the desired archive through **Codeberg Releases**.
+1. Download the desired archive through [Releases](/xshaduwulfx/proton-linuwux/releases).
 
 2. Extract the Proton-LinUwUx directory into the appropriate Heroic Proton directory:
 
@@ -135,7 +135,7 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
 
 ### Lutris
 
-1. Download the desired archive through [Codeberg Releases](https://codeberg.org/xshaduwulfx/proton-linuwux/releases).
+1. Download the desired archive through [Releases](/xshaduwulfx/proton-linuwux/releases).
 
 2. Extract the Proton-LinUwUx directory into the Lutris custom Wine runners directory:
 
