@@ -234,7 +234,7 @@ For compatibility issues, regressions, build problems or troubleshooting:
 - **Support & Troubleshooting:** https://t.me/+EdH8jcUUzcA2MmFk
 - **Announcements:** https://t.me/protonlinuwux
 
-When reporting an issue, please include the Proton-LinUwUx build used, the affected game or application and any relevant logs. Runtime diagnostics can be enabled with `LINUWUX_DEBUG=1` when requested during troubleshooting.
+When reporting an issue, please include the Proton-LinUwUx build used, the affected game or application and any relevant logs. Runtime diagnostics can be enabled with `LINUWUX_DEBUG=1`. Optionally, diagnostics can also be written to a file with `LINUWUX_LOG=/path/to/linuwux.log`. Both variables can be used together. Please provide the resulting LinUwUx log when reporting an issue.
 
 ## Disclaimer
 
