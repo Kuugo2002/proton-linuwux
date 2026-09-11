@@ -174,19 +174,32 @@ jobs:
 
           notes="$(
             printf '%s\n' \
-              'Automatically built from the latest Proton-CachyOS release.' \
+              "$base_release build integrating the LinUwUx Rework compatibility layer." \
               '' \
-              '## Base' \
+              '## Diagnostics' \
               '' \
-              "- $base_release" \
+              'For compatibility investigations, runtime diagnostics can be enabled with:' \
               '' \
-              '## LinUwUx integration' \
+              '`LINUWUX_DEBUG=1`' \
               '' \
-              '- LinUwUx integration ported directly into the Proton and Wine source trees.' \
+              'Optionally, diagnostics can also be written to a file with:' \
+              '' \
+              '`LINUWUX_LOG=/path/to/linuwux.log`' \
+              '' \
+              'Both variables can be used together.' \
+              '' \
+              'Please provide the resulting LinUwUx log when reporting an issue.' \
+              '' \
+              '## Support & Announcements' \
+              '' \
+              '**Support & Troubleshooting:** https://t.me/+EdH8jcUUzcA2MmFk' \
+              '' \
+              '**Announcements:** https://t.me/protonlinuwux' \
               '' \
               '## Credits' \
               '' \
-              'Proton-CachyOS: [CachyOS/proton-cachyos](https://github.com/CachyOS/proton-cachyos)' \
+              'Proton-CachyOS: https://github.com/CachyOS/proton-cachyos' \
+              '' \
               'LinUwUx: [A Hypervisor(-less) Denuvo bypass for Linux](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)' \
               '' \
               '_Built automatically with GitHub Actions._'
