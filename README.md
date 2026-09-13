@@ -181,6 +181,20 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
 > [!NOTE]
 > The runner path may need to be set again after adding a game or changing its launch options.
 
+## AVX Compatibility
+
+Some games may require AVX support to be exposed by the LinUwUx compatibility layer.
+
+If a game reports that AVX or AVX2 support is required, try launching it with:
+
+```text
+PROTON_AVX=1
+```
+
+Only enable this option for games that require it. Games whose token was generated without AVX support may fail to launch when `PROTON_AVX=1` is enabled.
+
+This option is therefore intended to be configured per game rather than enabled globally.
+
 ## FAQ
 
 ### How does the Hypervisor (HV) bypass work?
