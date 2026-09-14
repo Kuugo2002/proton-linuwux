@@ -701,6 +701,13 @@ static void linuwux_zero_cpuid_result(ucontext_t *ucontext)
     ucontext->uc_mcontext.gregs[REG_RDX] = 0;
 }
 
+static inline int linuwux_has_336933_target(void)
+{
+    return linuwux_router.pending_336933_target != 0 ||
+           linuwux_router.generic_target != 0 ||
+           linuwux_router.qsi.target != 0;
+}
+
 static inline void linuwux_commit_pending_current_route(void)
 {
     if (!linuwux_router.pending_336933_valid)
@@ -784,14 +791,18 @@ static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
             {
                 ucontext->uc_mcontext.gregs[REG_RAX] = 0x000a0655;
                 ucontext->uc_mcontext.gregs[REG_RBX] = 0x00200800;
-                ucontext->uc_mcontext.gregs[REG_RCX] = 0x7bfafbff;
+                ucontext->uc_mcontext.gregs[REG_RCX] =
+                    0x7bfafbff |
+                    (linuwux_has_336933_target() ? 0 : (1u << 31));
                 ucontext->uc_mcontext.gregs[REG_RDX] = 0xbfebfbff;
             }
             else
             {
                 ucontext->uc_mcontext.gregs[REG_RAX] = 0x00a20f10;
                 ucontext->uc_mcontext.gregs[REG_RBX] = 0x00180800;
-                ucontext->uc_mcontext.gregs[REG_RCX] = 0x7ad8320b;
+                ucontext->uc_mcontext.gregs[REG_RCX] =
+                    0x7ad8320b |
+                    (linuwux_has_336933_target() ? 0 : (1u << 31));
                 ucontext->uc_mcontext.gregs[REG_RDX] =
                     linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_AMD
                         ? 0x178bfbff
@@ -879,7 +890,9 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
             case 1:
                 ucontext->uc_mcontext.gregs[REG_RAX] = spoof_leaf1_eax;
                 ucontext->uc_mcontext.gregs[REG_RBX] = spoof_leaf1_ebx;
-                ucontext->uc_mcontext.gregs[REG_RCX] = spoof_leaf1_ecx;
+                ucontext->uc_mcontext.gregs[REG_RCX] =
+                    spoof_leaf1_ecx |
+                    (linuwux_has_336933_target() ? 0 : (1u << 31));
                 ucontext->uc_mcontext.gregs[REG_RDX] = spoof_leaf1_edx;
                 break;
 

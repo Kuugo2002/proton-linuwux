@@ -25,6 +25,8 @@ class Diagnostics:
         self.signal = self.wine / "dlls/ntdll/unix/signal_x86_64.c"
         self.virtual = self.wine / "dlls/ntdll/unix/virtual.c"
         self.unix_private = self.wine / "dlls/ntdll/unix/unix_private.h"
+        self.ntuser = self.wine / "include/ntuser.h"
+        self.user32_main = self.wine / "dlls/user32/user_main.c"
         self.hooks = self.wine / "dlls/ntdll/unix/linuwux_hooks.h"
         self.protocol = self.wine / "server/protocol.def"
         self.fd = self.wine / "server/fd.c"
@@ -223,6 +225,8 @@ class Diagnostics:
             (self.signal, "Wine signal_x86_64.c"),
             (self.virtual, "Wine virtual.c"),
             (self.unix_private, "Wine unix_private.h"),
+            (self.ntuser, "Wine ntuser.h"),
+            (self.user32_main, "Wine user32 user_main.c"),
             (self.protocol, "Wine server protocol.def"),
             (self.fd, "Wine server fd.c"),
             (self.wine_inf, "Wine loader wine.inf.in"),
@@ -288,6 +292,8 @@ class Diagnostics:
         signal = contents[self.signal]
         virtual = contents[self.virtual]
         unix_private = contents[self.unix_private]
+        ntuser = contents[self.ntuser]
+        user32_main = contents[self.user32_main]
         protocol = contents[self.protocol]
         fd = contents[self.fd]
         wine_inf = contents[self.wine_inf]
@@ -522,6 +528,53 @@ class Diagnostics:
             hints=("virtual_map_user_shared_data",),
         )
 
+        self.expect_absent(
+            self.ntuser,
+            ntuser,
+            "thread_detached",
+            "ntuser.h thread detach guard not already present",
+            "wmchar_data",
+        )
+
+        self.expect_count(
+            self.ntuser,
+            ntuser,
+            "wmchar_data;",
+            1,
+            "ntuser.h wmchar_data anchor",
+            hints=("wmchar_data",),
+        )
+
+        self.expect_absent(
+            self.user32_main,
+            user32_main,
+            "thread_detached",
+            "user32 thread detach guard not already present",
+            "thread_detach",
+            "NtUserExitingThread",
+        )
+
+        user32_detach_anchor = (
+            "static void thread_detach(void)\n"
+            "{\n"
+            "    struct ntuser_thread_info *thread_info = "
+            "NtUserGetThreadInfo();\n"
+            "\n"
+            "    NtUserCallNoParam( NtUserExitingThread );\n"
+        )
+
+        self.expect_count(
+            self.user32_main,
+            user32_main,
+            user32_detach_anchor,
+            1,
+            "user32 thread_detach insertion anchor",
+            hints=(
+                "static void thread_detach",
+                "NtUserExitingThread",
+            ),
+        )
+
         self.detect_backend_source(signal)
 
     def diagnose_post_apply(self):
@@ -533,6 +586,8 @@ class Diagnostics:
         signal = contents[self.signal]
         virtual = contents[self.virtual]
         unix_private = contents[self.unix_private]
+        ntuser = contents[self.ntuser]
+        user32_main = contents[self.user32_main]
         protocol = contents[self.protocol]
         fd = contents[self.fd]
         wine_inf = contents[self.wine_inf]
@@ -588,6 +643,22 @@ class Diagnostics:
                         "KUSER write alias unavailable",
                         "KUSER write-alias failure diagnostic",
                     ),
+                    (
+                        "static inline int linuwux_has_336933_target(void)",
+                        "336933 target-state helper",
+                    ),
+                    (
+                        "linuwux_router.pending_336933_target != 0",
+                        "Pending 336933 target state",
+                    ),
+                    (
+                        "linuwux_router.generic_target != 0",
+                        "Generic 336933 target state",
+                    ),
+                    (
+                        "linuwux_router.qsi.target != 0",
+                        "QSI 336933 target state",
+                    ),
                 ):
                     self.expect_present(
                         self.hooks,
@@ -601,6 +672,19 @@ class Diagnostics:
                 "LinUwUx hooks installed",
                 f"missing: {self.hooks}",
                 self.hooks,
+            )
+
+        if hooks is not None:
+            self.expect_count(
+                self.hooks,
+                hooks,
+                "linuwux_has_336933_target() ? 0 : (1u << 31)",
+                3,
+                "CPUID hypervisor bit target gating",
+                hints=(
+                    "linuwux_has_336933_target",
+                    "1u << 31",
+                ),
             )
 
         self.expect_present(
@@ -684,6 +768,70 @@ class Diagnostics:
             "Writable KUSER alias declaration",
             "virtual_map_user_shared_data_write_alias",
         )
+
+        self.expect_count(
+            self.ntuser,
+            ntuser,
+            "BOOL          thread_detached;  "
+            "/* thread cleanup already performed */",
+            1,
+            "Wine thread detach state",
+            hints=(
+                "thread_detached",
+                "wmchar_data",
+            ),
+        )
+
+        self.expect_count(
+            self.user32_main,
+            user32_main,
+            "if (thread_info->thread_detached) return;",
+            1,
+            "user32 duplicate thread detach guard",
+            hints=(
+                "thread_detached",
+                "thread_detach",
+            ),
+        )
+
+        self.expect_count(
+            self.user32_main,
+            user32_main,
+            "thread_info->thread_detached = TRUE;",
+            1,
+            "user32 thread detach state update",
+            hints=(
+                "thread_detached",
+                "NtUserExitingThread",
+            ),
+        )
+
+        guard_pos = user32_main.find(
+            "if (thread_info->thread_detached) return;"
+        )
+        state_pos = user32_main.find(
+            "thread_info->thread_detached = TRUE;"
+        )
+        exiting_pos = user32_main.find(
+            "NtUserCallNoParam( NtUserExitingThread );"
+        )
+
+        if (
+            guard_pos >= 0
+            and state_pos >= 0
+            and exiting_pos >= 0
+            and guard_pos < state_pos < exiting_pos
+        ):
+            self.pass_("user32 thread detach guard order")
+        else:
+            self.fail(
+                "user32 thread detach guard order",
+                f"guard={guard_pos}, state={state_pos}, "
+                f"NtUserExitingThread={exiting_pos}",
+                self.user32_main,
+                "thread_detached",
+                "NtUserExitingThread",
+            )
 
         self.expect_present(
             self.protocol,

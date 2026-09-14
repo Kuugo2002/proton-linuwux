@@ -25,6 +25,8 @@ HOOKS_DEST="$SOURCE_DIR/wine/dlls/ntdll/unix/linuwux_hooks.h"
 SIGNAL_FILE="$SOURCE_DIR/wine/dlls/ntdll/unix/signal_x86_64.c"
 VIRTUAL_FILE="$SOURCE_DIR/wine/dlls/ntdll/unix/virtual.c"
 UNIX_PRIVATE_FILE="$SOURCE_DIR/wine/dlls/ntdll/unix/unix_private.h"
+NTUSER_FILE="$SOURCE_DIR/wine/include/ntuser.h"
+USER32_MAIN_FILE="$SOURCE_DIR/wine/dlls/user32/user_main.c"
 PROTOCOL_FILE="$SOURCE_DIR/wine/server/protocol.def"
 REQUESTS_TOOL="$SOURCE_DIR/wine/tools/make_requests"
 FD_FILE="$SOURCE_DIR/wine/server/fd.c"
@@ -83,6 +85,27 @@ if [[ ! -f "$UNIX_PRIVATE_FILE" ]]
 then
     echo "Error: Wine unix_private.h not found:" >&2
     echo "$UNIX_PRIVATE_FILE" >&2
+    exit 1
+fi
+
+if [[ ! -f "$NTUSER_FILE" ]]
+then
+    echo "Error: Wine ntuser.h not found:" >&2
+    echo "$NTUSER_FILE" >&2
+    exit 1
+fi
+
+if [[ ! -f "$USER32_MAIN_FILE" ]]
+then
+    echo "Error: Wine user32 user_main.c not found:" >&2
+    echo "$USER32_MAIN_FILE" >&2
+    exit 1
+fi
+
+if grep -Fq 'thread_detached' "$NTUSER_FILE" ||
+   grep -Fq 'thread_detached' "$USER32_MAIN_FILE"
+then
+    echo "Error: Wine thread detach guard is already present" >&2
     exit 1
 fi
 
@@ -336,6 +359,8 @@ fi
 SIGNAL_TMP="$(mktemp)"
 VIRTUAL_TMP="$(mktemp)"
 UNIX_PRIVATE_TMP="$(mktemp)"
+NTUSER_TMP="$(mktemp)"
+USER32_MAIN_TMP="$(mktemp)"
 PROTOCOL_TMP="$(mktemp)"
 FD_TMP="$(mktemp)"
 WINE_INF_TMP="$(mktemp)"
@@ -343,6 +368,8 @@ PROTON_TMP="$(mktemp)"
 SIGNAL_BACKUP="$(mktemp)"
 VIRTUAL_BACKUP="$(mktemp)"
 UNIX_PRIVATE_BACKUP="$(mktemp)"
+NTUSER_BACKUP="$(mktemp)"
+USER32_MAIN_BACKUP="$(mktemp)"
 PROTOCOL_BACKUP="$(mktemp)"
 FD_BACKUP="$(mktemp)"
 WINE_INF_BACKUP="$(mktemp)"
@@ -351,6 +378,8 @@ PROTON_BACKUP="$(mktemp)"
 cp -p "$SIGNAL_FILE" "$SIGNAL_BACKUP"
 cp -p "$VIRTUAL_FILE" "$VIRTUAL_BACKUP"
 cp -p "$UNIX_PRIVATE_FILE" "$UNIX_PRIVATE_BACKUP"
+cp -p "$NTUSER_FILE" "$NTUSER_BACKUP"
+cp -p "$USER32_MAIN_FILE" "$USER32_MAIN_BACKUP"
 cp -p "$PROTOCOL_FILE" "$PROTOCOL_BACKUP"
 cp -p "$FD_FILE" "$FD_BACKUP"
 cp -p "$WINE_INF_FILE" "$WINE_INF_BACKUP"
@@ -359,8 +388,10 @@ cp -p "$PROTON_FILE" "$PROTON_BACKUP"
 cleanup()
 {
     rm -f "$SIGNAL_TMP" "$VIRTUAL_TMP" "$UNIX_PRIVATE_TMP" \
+          "$NTUSER_TMP" "$USER32_MAIN_TMP" \
           "$PROTOCOL_TMP" "$FD_TMP" "$WINE_INF_TMP" "$PROTON_TMP" \
           "$SIGNAL_BACKUP" "$VIRTUAL_BACKUP" "$UNIX_PRIVATE_BACKUP" \
+          "$NTUSER_BACKUP" "$USER32_MAIN_BACKUP" \
           "$PROTOCOL_BACKUP" "$FD_BACKUP" "$WINE_INF_BACKUP" "$PROTON_BACKUP"
 }
 
@@ -369,6 +400,8 @@ rollback()
     cp -p "$SIGNAL_BACKUP" "$SIGNAL_FILE"
     cp -p "$VIRTUAL_BACKUP" "$VIRTUAL_FILE"
     cp -p "$UNIX_PRIVATE_BACKUP" "$UNIX_PRIVATE_FILE"
+    cp -p "$NTUSER_BACKUP" "$NTUSER_FILE"
+    cp -p "$USER32_MAIN_BACKUP" "$USER32_MAIN_FILE"
     cp -p "$PROTOCOL_BACKUP" "$PROTOCOL_FILE"
     cp -p "$FD_BACKUP" "$FD_FILE"
     cp -p "$WINE_INF_BACKUP" "$WINE_INF_FILE"
@@ -480,6 +513,105 @@ if src.count(anchor) != 1:
 
 dst.write_text(src.replace(anchor, anchor + decl, 1))
 PYPRIVATE
+
+
+python3 - "$NTUSER_FILE" "$NTUSER_TMP" <<'PYNTUSER'
+from pathlib import Path
+import re
+import sys
+
+src = Path(sys.argv[1]).read_text()
+dst = Path(sys.argv[2])
+
+if "thread_detached" in src:
+    raise SystemExit(
+        "Error: thread_detached already present in ntuser.h"
+    )
+
+pattern = r'^([ \t]*UINT64[ \t]+wmchar_data;[^\n]*\n)'
+matches = re.findall(pattern, src, flags=re.MULTILINE)
+
+if len(matches) != 1:
+    raise SystemExit(
+        "Error: expected exactly one wmchar_data anchor "
+        f"in ntuser.h; found {len(matches)}"
+    )
+
+replacement = (
+    r'\1'
+    '    BOOL          thread_detached;  '
+    '/* thread cleanup already performed */\n'
+)
+
+patched, count = re.subn(
+    pattern,
+    replacement,
+    src,
+    count=1,
+    flags=re.MULTILINE,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Error: failed to inject thread_detached into ntuser.h"
+    )
+
+dst.write_text(patched)
+PYNTUSER
+
+
+python3 - "$USER32_MAIN_FILE" "$USER32_MAIN_TMP" <<'PYUSER32'
+from pathlib import Path
+import re
+import sys
+
+src = Path(sys.argv[1]).read_text()
+dst = Path(sys.argv[2])
+
+if "thread_detached" in src:
+    raise SystemExit(
+        "Error: thread_detached already present in user_main.c"
+    )
+
+pattern = (
+    r'(static void thread_detach\(void\)\n'
+    r'\{\n'
+    r'[ \t]*struct ntuser_thread_info \*thread_info = '
+    r'NtUserGetThreadInfo\(\);\n'
+    r'\n)'
+    r'([ \t]*NtUserCallNoParam\( NtUserExitingThread \);\n)'
+)
+
+matches = re.findall(pattern, src)
+
+if len(matches) != 1:
+    raise SystemExit(
+        "Error: expected exactly one user32 thread_detach "
+        f"anchor; found {len(matches)}"
+    )
+
+replacement = (
+    r'\1'
+    '    if (thread_info->thread_detached) return;\n'
+    '    thread_info->thread_detached = TRUE;\n'
+    '\n'
+    r'\2'
+)
+
+patched, count = re.subn(
+    pattern,
+    replacement,
+    src,
+    count=1,
+)
+
+if count != 1:
+    raise SystemExit(
+        "Error: failed to inject user32 thread detach guard"
+    )
+
+dst.write_text(patched)
+PYUSER32
 
 
 cp "$PROTOCOL_FILE" "$PROTOCOL_TMP"
@@ -712,6 +844,24 @@ then
     exit 1
 fi
 
+if [[ "$(grep -Fc 'BOOL          thread_detached;  /* thread cleanup already performed */' "$NTUSER_TMP" || true)" -ne 1 ]]
+then
+    echo "Error: failed to prepare thread_detached state in ntuser.h" >&2
+    exit 1
+fi
+
+if [[ "$(grep -Fc 'if (thread_info->thread_detached) return;' "$USER32_MAIN_TMP" || true)" -ne 1 ]]
+then
+    echo "Error: failed to prepare user32 thread detach guard" >&2
+    exit 1
+fi
+
+if [[ "$(grep -Fc 'thread_info->thread_detached = TRUE;' "$USER32_MAIN_TMP" || true)" -ne 1 ]]
+then
+    echo "Error: failed to prepare user32 thread detach state update" >&2
+    exit 1
+fi
+
 if ! grep -Fq '@REQ(set_faketime)' "$PROTOCOL_TMP"
 then
     echo "Error: failed to prepare set_faketime in protocol.def" >&2
@@ -731,6 +881,8 @@ cp "$PROTON_TMP" "$PROTON_FILE"
 cp "$SIGNAL_TMP" "$SIGNAL_FILE"
 cp -p "$VIRTUAL_TMP" "$VIRTUAL_FILE"
 cp -p "$UNIX_PRIVATE_TMP" "$UNIX_PRIVATE_FILE"
+cp -p "$NTUSER_TMP" "$NTUSER_FILE"
+cp -p "$USER32_MAIN_TMP" "$USER32_MAIN_FILE"
 cp "$HOOKS_SOURCE" "$HOOKS_DEST"
 
 # server/protocol.def is the authoritative Wine server protocol source.
