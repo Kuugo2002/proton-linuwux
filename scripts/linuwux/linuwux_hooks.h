@@ -1008,6 +1008,10 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 linuwux_router.qsi.syscall_id =
                     (uint32_t)ucontext->uc_mcontext.gregs[REG_RCX];
                 linuwux_router.qsi.syscall_id_valid = 1;
+                linuwux_debug_observation(
+                    "legacy-qsi-id",
+                    (uint64_t)linuwux_router.qsi.syscall_id,
+                    linuwux_router.qsi.target);
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
@@ -1018,6 +1022,10 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 linuwux_router.qfa.target =
                     ucontext->uc_mcontext.gregs[REG_RCX];
                 linuwux_router.qfa.target_valid = 1;
+                linuwux_debug_observation(
+                    "legacy-qfa-target",
+                    linuwux_router.qfa.target,
+                    (uint64_t)linuwux_router.qfa.syscall_id);
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
@@ -1028,6 +1036,10 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 linuwux_router.qfa.syscall_id =
                     (uint32_t)ucontext->uc_mcontext.gregs[REG_RCX];
                 linuwux_router.qfa.syscall_id_valid = 1;
+                linuwux_debug_observation(
+                    "legacy-qfa-id",
+                    (uint64_t)linuwux_router.qfa.syscall_id,
+                    linuwux_router.qfa.target);
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
@@ -1170,21 +1182,49 @@ static int linuwux_handle_sigsys(void *sigcontext)
      */
     linuwux_commit_pending_current_route();
 
+    linuwux_debug_observation(
+        "sigsys",
+        (uint64_t)syscall_id,
+        (uint64_t)ctx->uc_mcontext.gregs[REG_R10]);
+
     if (linuwux_router.qsi.target_valid &&
         linuwux_router.qsi.syscall_id_valid &&
         linuwux_router.qsi.target != 0 &&
         syscall_id == linuwux_router.qsi.syscall_id &&
         ctx->uc_mcontext.gregs[REG_R10] <= 0)
+    {
+        linuwux_debug_observation(
+            "sigsys-route-qsi",
+            (uint64_t)syscall_id,
+            linuwux_router.qsi.target);
         return linuwux_redirect_syscall(ctx, linuwux_router.qsi.target);
+    }
 
     if (linuwux_router.qfa.target_valid &&
         linuwux_router.qfa.syscall_id_valid &&
         linuwux_router.qfa.target != 0 &&
         syscall_id == linuwux_router.qfa.syscall_id)
+    {
+        linuwux_debug_observation(
+            "sigsys-route-qfa",
+            (uint64_t)syscall_id,
+            linuwux_router.qfa.target);
         return linuwux_redirect_syscall(ctx, linuwux_router.qfa.target);
+    }
 
     if (linuwux_router.generic_target != 0)
+    {
+        linuwux_debug_observation(
+            "sigsys-route-generic",
+            (uint64_t)syscall_id,
+            linuwux_router.generic_target);
         return linuwux_redirect_syscall(ctx, linuwux_router.generic_target);
+    }
+
+    linuwux_debug_observation(
+        "sigsys-unhandled",
+        (uint64_t)syscall_id,
+        (uint64_t)ctx->uc_mcontext.gregs[REG_R10]);
 
     return 0;
 }
