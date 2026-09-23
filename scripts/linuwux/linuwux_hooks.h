@@ -19,15 +19,6 @@
 #define ARCH_SET_CPUID 0x1012
 #endif
 
-enum linuwux_protocol_flag
-{
-    LINUWUX_PROTOCOL_CURRENT         = 1u << 0,
-    LINUWUX_PROTOCOL_LEGACY          = 1u << 1,
-    LINUWUX_PROTOCOL_LEGACY_OBSERVED = 1u << 2,
-};
-
-static unsigned int linuwux_protocol_flags;
-
 struct linuwux_syscall_route
 {
     uint64_t target;
@@ -36,18 +27,27 @@ struct linuwux_syscall_route
     unsigned int syscall_id_valid;
 };
 
-struct linuwux_syscall_router
+/*
+ * Facts observed from the client control protocol.
+ *
+ * Leaf registration is kept separate from the policy that decides how
+ * registered handlers are used.  This avoids assigning a global protocol
+ * class merely because a particular control leaf was observed.
+ */
+struct linuwux_control_state
 {
-    uint64_t generic_target;
+    unsigned int target_cr3_seen;
+    unsigned int dispatch_session_seen;
 
-    uint64_t pending_336933_target;
-    unsigned int pending_336933_valid;
+    uint64_t target_pid;
+    unsigned int target_pid_valid;
 
-    struct linuwux_syscall_route qsi;
-    struct linuwux_syscall_route qfa;
+    struct linuwux_syscall_route system;
+    struct linuwux_syscall_route attributes;
 };
 
-static struct linuwux_syscall_router linuwux_router;
+static struct linuwux_control_state linuwux_control;
+static unsigned int linuwux_syscall_hack_enabled;
 static KUSER_SHARED_DATA *linuwux_kuser_write_alias;
 
 /*
@@ -79,11 +79,17 @@ static inline void linuwux_debug_emit(const char *message, size_t length)
 static void linuwux_debug_init(void)
 {
     const char *value = getenv("LINUWUX_DEBUG");
+    const char *syscall_hack = getenv("LINUWUX_SYSCALL_HACK");
     const char *path;
     int saved_errno = errno;
 
     linuwux_debug_enabled =
         value && value[0] == '1' && value[1] == '\0';
+
+    linuwux_syscall_hack_enabled =
+        syscall_hack &&
+        syscall_hack[0] == '1' &&
+        syscall_hack[1] == '\0';
 
     if (!linuwux_debug_enabled)
     {
@@ -544,13 +550,23 @@ static void linuwux_prepare_kuser_write_alias(void)
  * Keep this separate from the visible-state profiles because known
  * protocol variants differ in whether they request the slow route.
  */
-static inline void linuwux_enable_syscall_slow_route(void)
+static inline void linuwux_configure_syscall_path(
+    unsigned int compatibility_slow)
 {
-    if (linuwux_kuser_write_alias)
-    {
-        linuwux_kuser_write_alias->SystemCall = 0;
-        LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [syscall] slow route enabled\n");
-    }
+    if (!linuwux_kuser_write_alias)
+        return;
+
+    if (!compatibility_slow && !linuwux_syscall_hack_enabled)
+        return;
+
+    linuwux_kuser_write_alias->SystemCall = 0;
+
+    if (linuwux_syscall_hack_enabled)
+        LINUWUX_DEBUG_EVENT(
+            "LinUwUx DEBUG [syscall] LINUWUX_SYSCALL_HACK applied\n");
+    else
+        LINUWUX_DEBUG_EVENT(
+            "LinUwUx DEBUG [syscall] compatibility slow route enabled\n");
 }
 
 /**
@@ -701,87 +717,91 @@ static void linuwux_zero_cpuid_result(ucontext_t *ucontext)
     ucontext->uc_mcontext.gregs[REG_RDX] = 0;
 }
 
-static inline int linuwux_has_336933_target(void)
+static inline int linuwux_has_system_target(void)
 {
-    return linuwux_router.pending_336933_target != 0 ||
-           linuwux_router.generic_target != 0 ||
-           linuwux_router.qsi.target != 0;
+    return linuwux_control.system.target != 0;
 }
 
-static inline void linuwux_commit_pending_current_route(void)
+static inline int linuwux_control_session_observed(void)
 {
-    if (!linuwux_router.pending_336933_valid)
-        return;
-
-    if (linuwux_protocol_flags & LINUWUX_PROTOCOL_LEGACY)
-        return;
-
-    linuwux_protocol_flags |= LINUWUX_PROTOCOL_CURRENT;
-
-    linuwux_router.generic_target =
-        linuwux_router.pending_336933_target;
-
-    linuwux_router.pending_336933_target = 0;
-    linuwux_router.pending_336933_valid = 0;
-
-    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [router] pending -> current\n");
-}
-
-
-static inline void linuwux_resolve_pending_legacy_route(void)
-{
-    if (!linuwux_router.pending_336933_valid)
-        return;
-
-    if (!linuwux_router.qsi.target_valid)
-    {
-        linuwux_router.qsi.target =
-            linuwux_router.pending_336933_target;
-        linuwux_router.qsi.target_valid = 1;
-    }
-
-    linuwux_router.pending_336933_target = 0;
-    linuwux_router.pending_336933_valid = 0;
-
-    LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [router] pending -> legacy QSI\n");
-}
-
-
-static void linuwux_activate_legacy_protocol(void)
-{
-    unsigned int was_legacy =
-        linuwux_protocol_flags & LINUWUX_PROTOCOL_LEGACY;
-
-    linuwux_protocol_flags |= LINUWUX_PROTOCOL_LEGACY;
-
-    if (linuwux_router.pending_336933_valid)
-    {
-        linuwux_resolve_pending_legacy_route();
-    }
-    else if (!linuwux_router.qsi.target_valid &&
-             linuwux_router.generic_target)
-    {
-        linuwux_router.qsi.target =
-            linuwux_router.generic_target;
-        linuwux_router.qsi.target_valid = 1;
-    }
-
     /*
-     * KUSER transition remains deferred until the existing explicit
-     * legacy-profile event.
+     * TARGET_PID is meaningful only after a routing registration has been
+     * observed. TARGET_CR3 and DISPATCH_SESSION are independent wire facts
+     * and do not establish such a registration by themselves.
      */
-    if (!was_legacy)
+    return linuwux_control.system.target_valid ||
+           linuwux_control.system.syscall_id_valid ||
+           linuwux_control.attributes.target_valid ||
+           linuwux_control.attributes.syscall_id_valid;
+}
+
+static void linuwux_apply_system_registration_policy(void)
+{
+    /*
+     * A SYSTEM handler is a wire-level registration.  The visible-state
+     * recipe is selected independently from that meaning.
+     *
+     * Preserve the established temporal behaviour: SYSTEM registration
+     * first exposes the general KUSER recipe.  A later completed historical
+     * sequence may restore the saved state and replace that recipe.
+     */
+    patch_kuser_shared_data();
+    linuwux_configure_syscall_path(1);
+}
+
+static inline int linuwux_use_historical_cpuid_profile(void)
+{
+    /*
+     * Preserve the established temporal transition without assigning a
+     * global protocol class.  These are the explicit dispatch registrations
+     * that historically activated the alternate CPUID profile.
+     */
+    return linuwux_control.system.syscall_id_valid ||
+           linuwux_control.attributes.target_valid ||
+           linuwux_control.attributes.syscall_id_valid;
+}
+
+static inline int linuwux_use_cr3_system_kuser_profile(void)
+{
+    /*
+     * This is a local compatibility recipe decision, not a wire-protocol
+     * classification.  All required registrations must already be present.
+     */
+    return linuwux_control.target_cr3_seen &&
+           linuwux_control.system.target_valid &&
+           linuwux_control.system.syscall_id_valid &&
+           linuwux_control.target_pid_valid;
+}
+
+static void linuwux_apply_target_pid_policy(void)
+{
+    /*
+     * A complete CR3 + SYSTEM registration uses the historical visible-state
+     * recipe already proven by the existing compatibility path.
+     */
+    if (linuwux_use_cr3_system_kuser_profile())
     {
-        MESSAGE("Activating legacy LinUwUx protocol\n");
-        LINUWUX_DEBUG_EVENT(
-            "LinUwUx DEBUG [router] legacy activated\n");
+        MESSAGE("Applying historical KUSER_SHARED_DATA profile\n");
+
+        linuwux_restore_pre_current_kuser_state();
+        patch_legacy_kuser_shared_data();
+        linuwux_configure_syscall_path(1);
+    }
+    else
+    {
+        /*
+         * The explicit syscall override is independent from profile choice.
+         * This also gives LINUWUX_SYSCALL_HACK a real effect when no
+         * compatibility recipe itself requires the slow path.
+         */
+        linuwux_configure_syscall_path(0);
     }
 }
 
 static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
                                                ucontext_t *ucontext)
 {
-    if (!(linuwux_protocol_flags & LINUWUX_PROTOCOL_LEGACY))
+    if (!linuwux_use_historical_cpuid_profile())
         return 0;
 
     switch (leaf)
@@ -793,7 +813,7 @@ static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
                 ucontext->uc_mcontext.gregs[REG_RBX] = 0x00200800;
                 ucontext->uc_mcontext.gregs[REG_RCX] =
                     0x7bfafbff |
-                    (linuwux_has_336933_target() ? 0 : (1u << 31));
+                    (linuwux_has_system_target() ? 0 : (1u << 31));
                 ucontext->uc_mcontext.gregs[REG_RDX] = 0xbfebfbff;
             }
             else
@@ -802,7 +822,7 @@ static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
                 ucontext->uc_mcontext.gregs[REG_RBX] = 0x00180800;
                 ucontext->uc_mcontext.gregs[REG_RCX] =
                     0x7ad8320b |
-                    (linuwux_has_336933_target() ? 0 : (1u << 31));
+                    (linuwux_has_system_target() ? 0 : (1u << 31));
                 ucontext->uc_mcontext.gregs[REG_RDX] =
                     linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_AMD
                         ? 0x178bfbff
@@ -892,7 +912,7 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 ucontext->uc_mcontext.gregs[REG_RBX] = spoof_leaf1_ebx;
                 ucontext->uc_mcontext.gregs[REG_RCX] =
                     spoof_leaf1_ecx |
-                    (linuwux_has_336933_target() ? 0 : (1u << 31));
+                    (linuwux_has_system_target() ? 0 : (1u << 31));
                 ucontext->uc_mcontext.gregs[REG_RDX] = spoof_leaf1_edx;
                 break;
 
@@ -929,117 +949,100 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 break;
 
             case 0x336933:
-                if (linuwux_protocol_flags & LINUWUX_PROTOCOL_LEGACY)
-                {
-                    MESSAGE("Registering legacy QSI syscall target\n");
+                /*
+                 * ARM_QUERY_SYSTEM_HANDLER.
+                 *
+                 * This leaf always registers the system-handler address.
+                 * How that handler is routed is decided independently from
+                 * the wire-level registration.
+                 */
+                MESSAGE("Registering system syscall target\n");
 
-                    linuwux_router.qsi.target =
-                        ucontext->uc_mcontext.gregs[REG_RCX];
-                    linuwux_router.qsi.target_valid = 1;
-                }
-                else if (linuwux_protocol_flags &
-                         LINUWUX_PROTOCOL_LEGACY_OBSERVED)
-                {
-                    /*
-                     * Ambiguous registration.
-                     *
-                     * Keep routing unresolved while exposing the CURRENT
-                     * KUSER-visible state required by the syscall path.
-                     * A later LEGACY promotion restores the pre-CURRENT
-                     * snapshot before applying the legacy KUSER profile.
-                     */
-                    linuwux_router.pending_336933_target =
-                        ucontext->uc_mcontext.gregs[REG_RCX];
+                linuwux_control.system.target =
+                    ucontext->uc_mcontext.gregs[REG_RCX];
+                linuwux_control.system.target_valid = 1;
 
-                    linuwux_router.pending_336933_valid = 1;
+                linuwux_debug_observation(
+                    "system-target",
+                    linuwux_control.system.target,
+                    UINT64_C(0));
 
-                    LINUWUX_DEBUG_EVENT(
-                        "LinUwUx DEBUG [router] pending 336933 registered\n");
-
-                    /*
-                     * Pending CURRENT-visible state.
-                     *
-                     * Routing remains unresolved until either an explicit
-                     * legacy registration or the first routable SIGSYS.
-                     * Snapshot support allows a later LEGACY transition to
-                     * reconstruct its pre-CURRENT KUSER state.
-                     */
-                    patch_kuser_shared_data();
-                    linuwux_enable_syscall_slow_route();
-                }
-                else
-                {
-                    /*
-                     * Direct/non-ambiguous CURRENT path remains unchanged.
-                     */
-                    MESSAGE("Spoofing CPUID leaf %x\n", leaf);
-
-                    linuwux_protocol_flags |=
-                        LINUWUX_PROTOCOL_CURRENT;
-
-                    linuwux_router.generic_target =
-                        ucontext->uc_mcontext.gregs[REG_RCX];
-
-                    patch_kuser_shared_data();
-                    linuwux_enable_syscall_slow_route();
-                }
+                linuwux_apply_system_registration_policy();
 
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
             case 0x69696969:
                 /*
-                 * Observation only: no semantic protocol transition yet.
+                 * ARM_TARGET_CR3.
+                 *
+                 * Identity observation only.  It does not classify the
+                 * complete client protocol.
                  */
-                MESSAGE("Observing legacy LinUwUx protocol\n");
-
-                linuwux_protocol_flags |=
-                    LINUWUX_PROTOCOL_LEGACY_OBSERVED;
+                linuwux_control.target_cr3_seen = 1;
 
                 LINUWUX_DEBUG_EVENT(
-                    "LinUwUx DEBUG [router] legacy observed\n");
+                    "LinUwUx DEBUG [control] target CR3 observed\n");
 
                 goto native_cpuid;
 
-            case 0x336943:
-                linuwux_activate_legacy_protocol();
+            case 0x00693369:
+                /*
+                 * ARM_DISPATCH_SESSION.
+                 *
+                 * Record the capability independently from handler
+                 * registration and KUSER policy.
+                 */
+                linuwux_control.dispatch_session_seen = 1;
 
-                MESSAGE("Registering legacy QSI syscall ID\n");
-                linuwux_router.qsi.syscall_id =
+                LINUWUX_DEBUG_EVENT(
+                    "LinUwUx DEBUG [control] dispatch session observed\n");
+
+                linuwux_zero_cpuid_result(ucontext);
+                break;
+
+            case 0x336943:
+                MESSAGE("Registering system syscall ID\n");
+
+                linuwux_control.system.syscall_id =
                     (uint32_t)ucontext->uc_mcontext.gregs[REG_RCX];
-                linuwux_router.qsi.syscall_id_valid = 1;
+                linuwux_control.system.syscall_id_valid = 1;
+
                 linuwux_debug_observation(
-                    "legacy-qsi-id",
-                    (uint64_t)linuwux_router.qsi.syscall_id,
-                    linuwux_router.qsi.target);
+                    "system-syscall-id",
+                    (uint64_t)linuwux_control.system.syscall_id,
+                    linuwux_control.system.target);
+
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
             case 0x336934:
-                linuwux_activate_legacy_protocol();
+                MESSAGE("Registering attributes syscall target\n");
 
-                MESSAGE("Registering legacy QFA syscall target\n");
-                linuwux_router.qfa.target =
+                linuwux_control.attributes.target =
                     ucontext->uc_mcontext.gregs[REG_RCX];
-                linuwux_router.qfa.target_valid = 1;
+                linuwux_control.attributes.target_valid = 1;
+
                 linuwux_debug_observation(
-                    "legacy-qfa-target",
-                    linuwux_router.qfa.target,
-                    (uint64_t)linuwux_router.qfa.syscall_id);
+                    "attributes-target",
+                    linuwux_control.attributes.target,
+                    (uint64_t)linuwux_control.attributes.syscall_id);
+
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
             case 0x336944:
-                linuwux_activate_legacy_protocol();
+                MESSAGE("Registering attributes syscall ID\n");
 
-                MESSAGE("Registering legacy QFA syscall ID\n");
-                linuwux_router.qfa.syscall_id =
+                linuwux_control.attributes.syscall_id =
                     (uint32_t)ucontext->uc_mcontext.gregs[REG_RCX];
-                linuwux_router.qfa.syscall_id_valid = 1;
+                linuwux_control.attributes.syscall_id_valid = 1;
+
                 linuwux_debug_observation(
-                    "legacy-qfa-id",
-                    (uint64_t)linuwux_router.qfa.syscall_id,
-                    linuwux_router.qfa.target);
+                    "attributes-syscall-id",
+                    (uint64_t)linuwux_control.attributes.syscall_id,
+                    linuwux_control.attributes.target);
+
                 linuwux_zero_cpuid_result(ucontext);
                 break;
 
@@ -1064,26 +1067,32 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 break;
 
             case 0x1337:
-                if (linuwux_protocol_flags & LINUWUX_PROTOCOL_LEGACY)
-                {
-                    MESSAGE("Applying legacy KUSER_SHARED_DATA profile\n");
+                /*
+                 * ARM_TARGET_PID is meaningful only after a routing registration
+                 * has already been observed.  Preserve native CPUID behaviour for
+                 * unrelated callers querying leaf 0x1337.
+                 */
+                if (!linuwux_control_session_observed())
+                    goto native_cpuid;
 
-                    /*
-                     * A retroactively promoted legacy session may already
-                     * have received the CURRENT KUSER profile through
-                     * 0x336933.  Reconstruct the state that historical
-                     * legacy entry would have seen before applying its
-                     * profile.
-                     */
-                    linuwux_restore_pre_current_kuser_state();
-                    patch_legacy_kuser_shared_data();
-                    linuwux_enable_syscall_slow_route();
-                    linuwux_zero_cpuid_result(ucontext);
-                    break;
-                }
+                /*
+                 * RCX is protocol state.  KUSER selection remains a local
+                 * compatibility decision and is not part of the wire meaning
+                 * of this leaf.
+                 */
+                linuwux_control.target_pid =
+                    ucontext->uc_mcontext.gregs[REG_RCX];
+                linuwux_control.target_pid_valid = 1;
 
-                /* Non-legacy callers retain the native CPUID result. */
-                __attribute__((fallthrough));
+                linuwux_debug_observation(
+                    "target-pid",
+                    linuwux_control.target_pid,
+                    UINT64_C(0));
+
+                linuwux_apply_target_pid_policy();
+
+                linuwux_zero_cpuid_result(ucontext);
+                break;
 
             default:
                 /*
@@ -1176,49 +1185,59 @@ static int linuwux_handle_sigsys(void *sigcontext)
     if (ctx->uc_mcontext.gregs[REG_RAX] == 0x7fffffffffff)
         return 0;
 
-    /*
-     * First routable SIGSYS resolves an ambiguous registration as CURRENT.
-     * Pure state mutation only: no mmap/mprotect/sysconf/logging here.
-     */
-    linuwux_commit_pending_current_route();
-
     linuwux_debug_observation(
         "sigsys",
         (uint64_t)syscall_id,
         (uint64_t)ctx->uc_mcontext.gregs[REG_R10]);
 
-    if (linuwux_router.qsi.target_valid &&
-        linuwux_router.qsi.syscall_id_valid &&
-        linuwux_router.qsi.target != 0 &&
-        syscall_id == linuwux_router.qsi.syscall_id &&
+    /*
+     * Specific dispatch registrations take precedence over fallback routing.
+     */
+    if (linuwux_control.system.target_valid &&
+        linuwux_control.system.syscall_id_valid &&
+        linuwux_control.system.target != 0 &&
+        syscall_id == linuwux_control.system.syscall_id &&
         ctx->uc_mcontext.gregs[REG_R10] <= 0)
     {
         linuwux_debug_observation(
-            "sigsys-route-qsi",
+            "sigsys-route-system",
             (uint64_t)syscall_id,
-            linuwux_router.qsi.target);
-        return linuwux_redirect_syscall(ctx, linuwux_router.qsi.target);
+            linuwux_control.system.target);
+
+        return linuwux_redirect_syscall(
+            ctx, linuwux_control.system.target);
     }
 
-    if (linuwux_router.qfa.target_valid &&
-        linuwux_router.qfa.syscall_id_valid &&
-        linuwux_router.qfa.target != 0 &&
-        syscall_id == linuwux_router.qfa.syscall_id)
+    if (linuwux_control.attributes.target_valid &&
+        linuwux_control.attributes.syscall_id_valid &&
+        linuwux_control.attributes.target != 0 &&
+        syscall_id == linuwux_control.attributes.syscall_id)
     {
         linuwux_debug_observation(
-            "sigsys-route-qfa",
+            "sigsys-route-attributes",
             (uint64_t)syscall_id,
-            linuwux_router.qfa.target);
-        return linuwux_redirect_syscall(ctx, linuwux_router.qfa.target);
+            linuwux_control.attributes.target);
+
+        return linuwux_redirect_syscall(
+            ctx, linuwux_control.attributes.target);
     }
 
-    if (linuwux_router.generic_target != 0)
+    /*
+     * A SYSTEM handler without a syscall ID is a usable fallback target.
+     * The registration itself remains SYSTEM_HANDLER state: no target is
+     * copied or reclassified when SIGSYS arrives.
+     */
+    if (linuwux_control.system.target_valid &&
+        !linuwux_control.system.syscall_id_valid &&
+        linuwux_control.system.target != 0)
     {
         linuwux_debug_observation(
-            "sigsys-route-generic",
+            "sigsys-route-system-fallback",
             (uint64_t)syscall_id,
-            linuwux_router.generic_target);
-        return linuwux_redirect_syscall(ctx, linuwux_router.generic_target);
+            linuwux_control.system.target);
+
+        return linuwux_redirect_syscall(
+            ctx, linuwux_control.system.target);
     }
 
     linuwux_debug_observation(

@@ -644,20 +644,96 @@ class Diagnostics:
                         "KUSER write-alias failure diagnostic",
                     ),
                     (
-                        "static inline int linuwux_has_336933_target(void)",
-                        "336933 target-state helper",
+                        'getenv("LINUWUX_SYSCALL_HACK")',
+                        "LinUwUx syscall-hack control",
                     ),
                     (
-                        "linuwux_router.pending_336933_target != 0",
-                        "Pending 336933 target state",
+                        "struct linuwux_control_state",
+                        "LinUwUx v2 control-state facts",
                     ),
                     (
-                        "linuwux_router.generic_target != 0",
-                        "Generic 336933 target state",
+                        "static inline int linuwux_has_system_target(void)",
+                        "SYSTEM target-state helper",
                     ),
                     (
-                        "linuwux_router.qsi.target != 0",
-                        "QSI 336933 target state",
+                        "return linuwux_control.system.target != 0;",
+                        "SYSTEM target value gating",
+                    ),
+                    (
+                        "static inline int linuwux_control_session_observed(void)",
+                        "TARGET_PID routing-registration guard",
+                    ),
+                    (
+                        "static inline int linuwux_use_historical_cpuid_profile(void)",
+                        "Historical CPUID profile policy",
+                    ),
+                    (
+                        "static inline int linuwux_use_cr3_system_kuser_profile(void)",
+                        "CR3 SYSTEM KUSER profile policy",
+                    ),
+                    (
+                        "case 0x69696969:",
+                        "TARGET_CR3 control leaf",
+                    ),
+                    (
+                        "case 0x00693369:",
+                        "DISPATCH_SESSION control leaf",
+                    ),
+                    (
+                        "case 0x336933:",
+                        "SYSTEM target control leaf",
+                    ),
+                    (
+                        "case 0x336943:",
+                        "SYSTEM syscall-ID control leaf",
+                    ),
+                    (
+                        "case 0x336934:",
+                        "ATTRIBUTES target control leaf",
+                    ),
+                    (
+                        "case 0x336944:",
+                        "ATTRIBUTES syscall-ID control leaf",
+                    ),
+                    (
+                        "case 0x336967:",
+                        "SET_TIME control leaf",
+                    ),
+                    (
+                        "case 0x1337:",
+                        "TARGET_PID control leaf",
+                    ),
+                    (
+                        '"system-target"',
+                        "SYSTEM target registration diagnostic",
+                    ),
+                    (
+                        '"system-syscall-id"',
+                        "SYSTEM syscall-ID registration diagnostic",
+                    ),
+                    (
+                        '"attributes-target"',
+                        "ATTRIBUTES target registration diagnostic",
+                    ),
+                    (
+                        '"attributes-syscall-id"',
+                        "ATTRIBUTES syscall-ID registration diagnostic",
+                    ),
+                    (
+                        '"target-pid"',
+                        "TARGET_PID registration diagnostic",
+                    ),
+                    (
+                        '"sigsys-route-system"',
+                        "SYSTEM SIGSYS route diagnostic",
+                    ),
+                    (
+                        '"sigsys-route-attributes"',
+                        "ATTRIBUTES SIGSYS route diagnostic",
+                    ),
+                    (
+                        '"sigsys-route-system-fallback"',
+                        "SYSTEM fallback SIGSYS route diagnostic",
                     ),
                 ):
                     self.expect_present(
@@ -678,14 +754,102 @@ class Diagnostics:
             self.expect_count(
                 self.hooks,
                 hooks,
-                "linuwux_has_336933_target() ? 0 : (1u << 31)",
+                "linuwux_has_system_target() ? 0 : (1u << 31)",
                 3,
-                "CPUID hypervisor bit target gating",
+                "CPUID hypervisor bit SYSTEM-target gating",
                 hints=(
-                    "linuwux_has_336933_target",
+                    "linuwux_has_system_target",
                     "1u << 31",
                 ),
             )
+
+            for needle, description in (
+                (
+                    "linuwux_protocol_flags",
+                    "Legacy protocol flags removed",
+                ),
+                (
+                    "LINUWUX_PROTOCOL_",
+                    "Legacy protocol classifications removed",
+                ),
+                (
+                    "linuwux_router",
+                    "Legacy syscall router removed",
+                ),
+                (
+                    "pending_336933",
+                    "Pending 336933 routing state removed",
+                ),
+                (
+                    "generic_target",
+                    "Generic target routing state removed",
+                ),
+                (
+                    "linuwux_has_336933_target",
+                    "Legacy 336933 target helper removed",
+                ),
+            ):
+                self.expect_absent(
+                    self.hooks,
+                    hooks,
+                    needle,
+                    description,
+                    needle,
+                )
+
+            session_start = hooks.find(
+                "static inline int linuwux_control_session_observed(void)"
+            )
+            session_end = hooks.find(
+                "static void linuwux_apply_system_registration_policy(void)",
+                session_start,
+            )
+
+            if session_start >= 0 and session_end > session_start:
+                session_body = hooks[session_start:session_end]
+
+                required_session_facts = (
+                    "linuwux_control.system.target_valid",
+                    "linuwux_control.system.syscall_id_valid",
+                    "linuwux_control.attributes.target_valid",
+                    "linuwux_control.attributes.syscall_id_valid",
+                )
+                forbidden_session_facts = (
+                    "linuwux_control.target_cr3_seen",
+                    "linuwux_control.dispatch_session_seen",
+                )
+
+                missing = tuple(
+                    fact for fact in required_session_facts
+                    if fact not in session_body
+                )
+                forbidden = tuple(
+                    fact for fact in forbidden_session_facts
+                    if fact in session_body
+                )
+
+                if not missing and not forbidden:
+                    self.pass_(
+                        "TARGET_PID routing-registration gating",
+                        "routing facts only",
+                    )
+                else:
+                    self.fail(
+                        "TARGET_PID routing-registration gating",
+                        f"missing={missing}, forbidden={forbidden}",
+                        self.hooks,
+                        "linuwux_control_session_observed",
+                        "target_cr3_seen",
+                        "dispatch_session_seen",
+                    )
+            else:
+                self.fail(
+                    "TARGET_PID routing-registration gating",
+                    "unable to isolate linuwux_control_session_observed",
+                    self.hooks,
+                    "linuwux_control_session_observed",
+                    "linuwux_apply_system_registration_policy",
+                )
 
         self.expect_present(
             self.signal,
