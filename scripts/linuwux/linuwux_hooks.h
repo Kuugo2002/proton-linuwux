@@ -19,6 +19,19 @@
 #define ARCH_SET_CPUID 0x1012
 #endif
 
+enum linuwux_syscall_convention
+{
+    LINUWUX_SYSCALL_RESUME_REPLAY = 0,
+    LINUWUX_SYSCALL_SELECTOR_DISPATCH,
+    LINUWUX_SYSCALL_DUAL_DISPATCH
+};
+
+enum linuwux_presentation
+{
+    LINUWUX_PRESENTATION_DEFAULT = 0,
+    LINUWUX_PRESENTATION_LEGACY
+};
+
 struct linuwux_syscall_route
 {
     uint64_t target;
@@ -42,8 +55,14 @@ struct linuwux_control_state
     uint64_t target_pid;
     unsigned int target_pid_valid;
 
+    uint64_t resume_target;
+    unsigned int resume_target_valid;
+
     struct linuwux_syscall_route system;
     struct linuwux_syscall_route attributes;
+
+    enum linuwux_syscall_convention syscall_convention;
+    enum linuwux_presentation presentation;
 };
 
 static struct linuwux_control_state linuwux_control;
@@ -638,6 +657,58 @@ static void patch_legacy_kuser_shared_data(void)
     LINUWUX_DEBUG_EVENT("LinUwUx DEBUG [kuser] legacy profile applied\n");
 }
 
+/**
+ * Apply the selector-dispatch KUSER_SHARED_DATA visible-state profile.
+ *
+ * This is distinct from both the resume and dual-dispatch recipes.
+ */
+static void patch_selector_kuser_shared_data(void)
+{
+    UINT8 *kuser = (UINT8 *)0x000000007FFE0000UL;
+    long page_size_result = sysconf(_SC_PAGESIZE);
+    size_t page_size;
+    void *page_start;
+
+    if (page_size_result == -1)
+        linuwux_debug_observation(
+            "kuser-page-size-query-failed",
+            UINT64_C(4),
+            (uint64_t)errno);
+
+    page_size = (size_t)page_size_result;
+    page_start =
+        (void *)((uintptr_t)0x000000007FFE0000UL & ~(page_size - 1));
+
+    if (mprotect(page_start, page_size, PROT_READ | PROT_WRITE) == -1)
+    {
+        int call_errno = errno;
+
+        linuwux_debug_observation(
+            "kuser-mprotect-failed",
+            UINT64_C(4),
+            (uint64_t)call_errno);
+
+        MESSAGE("Failed to make selector kuser_shared_data writable: %s\n",
+                strerror(call_errno));
+        return;
+    }
+
+    *(UINT32 *)(kuser + 0x2d6) = UINT32_C(0x00010034);
+    *(UINT32 *)(kuser + 0x2e8) = UINT32_C(0x00bf9c8f);
+    *(UINT32 *)(kuser + 0x3c0) = UINT32_C(0x00000010);
+    *(UINT32 *)(kuser + 0x288) = UINT32_C(0x01010101);
+    *(UINT32 *)(kuser + 0x268) = UINT32_C(0x00090001);
+    *(UINT32 *)(kuser + 0x2f4) = UINT32_C(0);
+    *(UINT32 *)(kuser + 0x264) = UINT32_C(1);
+    *(UINT32 *)(kuser + 0x2d0) = UINT32_C(0x00000310);
+    *(UINT32 *)(kuser + 0x260) = UINT32_C(0x00006658);
+    *(UINT32 *)(kuser + 0x26c) = UINT32_C(0x0000000a);
+    *(UINT32 *)(kuser + 0x270) = UINT32_C(0);
+
+    LINUWUX_DEBUG_EVENT(
+        "LinUwUx DEBUG [kuser] selector profile applied\n");
+}
+
 /*
  * Detect the host CPU vendor and initialize spoofed CPUID values.
  */
@@ -719,7 +790,40 @@ static void linuwux_zero_cpuid_result(ucontext_t *ucontext)
 
 static inline int linuwux_has_system_target(void)
 {
-    return linuwux_control.system.target != 0;
+    return linuwux_control.system.target != 0 ||
+           linuwux_control.resume_target != 0;
+}
+
+static void linuwux_promote_dual_dispatch(void)
+{
+    /*
+     * A resume-handler registration predates the explicit dual-dispatch
+     * registrations.  Once a dispatch registration is observed, preserve
+     * that handler as the SYSTEM target unless a SYSTEM target has already
+     * been established independently.
+     */
+    if (linuwux_control.system.target == 0)
+    {
+        linuwux_control.system.target =
+            linuwux_control.resume_target;
+        linuwux_control.system.target_valid =
+            linuwux_control.system.target != 0;
+
+        linuwux_debug_observation(
+            "resume-promoted-system",
+            linuwux_control.system.target,
+            UINT64_C(0));
+    }
+
+    linuwux_control.syscall_convention =
+        LINUWUX_SYSCALL_DUAL_DISPATCH;
+    linuwux_control.presentation =
+        LINUWUX_PRESENTATION_LEGACY;
+
+    LINUWUX_DEBUG_EVENT(
+        "LinUwUx DEBUG [presentation] legacy selected\n");
+    LINUWUX_DEBUG_EVENT(
+        "LinUwUx DEBUG [router] dual dispatch active\n");
 }
 
 static inline int linuwux_control_session_observed(void)
@@ -729,24 +833,11 @@ static inline int linuwux_control_session_observed(void)
      * observed. TARGET_CR3 and DISPATCH_SESSION are independent wire facts
      * and do not establish such a registration by themselves.
      */
-    return linuwux_control.system.target_valid ||
+    return linuwux_control.resume_target_valid ||
+           linuwux_control.system.target_valid ||
            linuwux_control.system.syscall_id_valid ||
            linuwux_control.attributes.target_valid ||
            linuwux_control.attributes.syscall_id_valid;
-}
-
-static void linuwux_apply_system_registration_policy(void)
-{
-    /*
-     * A SYSTEM handler is a wire-level registration.  The visible-state
-     * recipe is selected independently from that meaning.
-     *
-     * Preserve the established temporal behaviour: SYSTEM registration
-     * first exposes the general KUSER recipe.  A later completed historical
-     * sequence may restore the saved state and replace that recipe.
-     */
-    patch_kuser_shared_data();
-    linuwux_configure_syscall_path(1);
 }
 
 static inline int linuwux_use_historical_cpuid_profile(void)
@@ -761,41 +852,62 @@ static inline int linuwux_use_historical_cpuid_profile(void)
            linuwux_control.attributes.syscall_id_valid;
 }
 
-static inline int linuwux_use_cr3_system_kuser_profile(void)
+enum linuwux_kuser_recipe
 {
-    /*
-     * This is a local compatibility recipe decision, not a wire-protocol
-     * classification.  All required registrations must already be present.
-     */
-    return linuwux_control.target_cr3_seen &&
-           linuwux_control.system.target_valid &&
-           linuwux_control.system.syscall_id_valid &&
-           linuwux_control.target_pid_valid;
+    LINUWUX_KUSER_RESUME = 0,
+    LINUWUX_KUSER_SELECTOR,
+    LINUWUX_KUSER_DISPATCH
+};
+
+static enum linuwux_kuser_recipe linuwux_kuser_recipe(void)
+{
+    switch (linuwux_control.syscall_convention)
+    {
+        case LINUWUX_SYSCALL_RESUME_REPLAY:
+            return LINUWUX_KUSER_RESUME;
+
+        case LINUWUX_SYSCALL_SELECTOR_DISPATCH:
+            if (linuwux_host_cpu_vendor == LINUWUX_CPU_VENDOR_INTEL)
+                return LINUWUX_KUSER_DISPATCH;
+
+            return LINUWUX_KUSER_SELECTOR;
+
+        case LINUWUX_SYSCALL_DUAL_DISPATCH:
+            return LINUWUX_KUSER_DISPATCH;
+    }
+
+    return LINUWUX_KUSER_RESUME;
+}
+
+static void linuwux_apply_kuser_recipe(void)
+{
+    switch (linuwux_kuser_recipe())
+    {
+        case LINUWUX_KUSER_RESUME:
+            patch_kuser_shared_data();
+            break;
+
+        case LINUWUX_KUSER_SELECTOR:
+            linuwux_restore_pre_current_kuser_state();
+            patch_selector_kuser_shared_data();
+            break;
+
+        case LINUWUX_KUSER_DISPATCH:
+            linuwux_restore_pre_current_kuser_state();
+            patch_legacy_kuser_shared_data();
+            break;
+    }
 }
 
 static void linuwux_apply_target_pid_policy(void)
 {
     /*
-     * A complete CR3 + SYSTEM registration uses the historical visible-state
-     * recipe already proven by the existing compatibility path.
+     * TARGET_PID commits the selected KUSER recipe and requests the
+     * compatibility slow syscall path.  Keep route configuration separate
+     * from the recipe itself.
      */
-    if (linuwux_use_cr3_system_kuser_profile())
-    {
-        MESSAGE("Applying historical KUSER_SHARED_DATA profile\n");
-
-        linuwux_restore_pre_current_kuser_state();
-        patch_legacy_kuser_shared_data();
-        linuwux_configure_syscall_path(1);
-    }
-    else
-    {
-        /*
-         * The explicit syscall override is independent from profile choice.
-         * This also gives LINUWUX_SYSCALL_HACK a real effect when no
-         * compatibility recipe itself requires the slow path.
-         */
-        linuwux_configure_syscall_path(0);
-    }
+    linuwux_apply_kuser_recipe();
+    linuwux_configure_syscall_path(1);
 }
 
 static int linuwux_apply_legacy_cpuid_profile(unsigned int leaf,
@@ -950,24 +1062,53 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
 
             case 0x336933:
                 /*
-                 * ARM_QUERY_SYSTEM_HANDLER.
+                 * REGISTER_RESUME_HANDLER.
                  *
-                 * This leaf always registers the system-handler address.
-                 * How that handler is routed is decided independently from
-                 * the wire-level registration.
+                 * Keep the initial resume handler separate from explicit
+                 * dual-dispatch registrations.  A later dispatch
+                 * registration may promote it to the SYSTEM route.
                  */
-                MESSAGE("Registering system syscall target\n");
+                MESSAGE("Registering resume syscall target\n");
 
-                linuwux_control.system.target =
-                    ucontext->uc_mcontext.gregs[REG_RCX];
-                linuwux_control.system.target_valid = 1;
+                if (linuwux_control.syscall_convention ==
+                    LINUWUX_SYSCALL_DUAL_DISPATCH)
+                {
+                    linuwux_control.system.target =
+                        ucontext->uc_mcontext.gregs[REG_RCX];
+                    linuwux_control.system.target_valid = 1;
 
-                linuwux_debug_observation(
-                    "system-target",
-                    linuwux_control.system.target,
-                    UINT64_C(0));
+                    linuwux_debug_observation(
+                        "system-target",
+                        linuwux_control.system.target,
+                        (uint64_t)linuwux_control.syscall_convention);
+                }
+                else
+                {
+                    /*
+                     * Re-registering an established resume target refreshes
+                     * the KUSER recipe before replacing the handler, matching
+                     * the ResumeTarget transition semantics.
+                     */
+                    if (linuwux_control.resume_target_valid)
+                        linuwux_apply_kuser_recipe();
 
-                linuwux_apply_system_registration_policy();
+                    linuwux_control.resume_target =
+                        ucontext->uc_mcontext.gregs[REG_RCX];
+                    linuwux_control.resume_target_valid = 1;
+
+                    if (linuwux_control.presentation ==
+                        LINUWUX_PRESENTATION_LEGACY)
+                        linuwux_control.syscall_convention =
+                            LINUWUX_SYSCALL_SELECTOR_DISPATCH;
+                    else
+                        linuwux_control.syscall_convention =
+                            LINUWUX_SYSCALL_RESUME_REPLAY;
+
+                    linuwux_debug_observation(
+                        "resume-target",
+                        linuwux_control.resume_target,
+                        (uint64_t)linuwux_control.syscall_convention);
+                }
 
                 linuwux_zero_cpuid_result(ucontext);
                 break;
@@ -1002,6 +1143,8 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 break;
 
             case 0x336943:
+                linuwux_promote_dual_dispatch();
+
                 MESSAGE("Registering system syscall ID\n");
 
                 linuwux_control.system.syscall_id =
@@ -1017,6 +1160,8 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 break;
 
             case 0x336934:
+                linuwux_promote_dual_dispatch();
+
                 MESSAGE("Registering attributes syscall target\n");
 
                 linuwux_control.attributes.target =
@@ -1032,6 +1177,8 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                 break;
 
             case 0x336944:
+                linuwux_promote_dual_dispatch();
+
                 MESSAGE("Registering attributes syscall ID\n");
 
                 linuwux_control.attributes.syscall_id =
@@ -1076,12 +1223,13 @@ static int linuwux_handle_cpuid(siginfo_t *siginfo, ucontext_t *ucontext)
                     goto native_cpuid;
 
                 /*
-                 * RCX is protocol state.  KUSER selection remains a local
-                 * compatibility decision and is not part of the wire meaning
-                 * of this leaf.
+                 * REGISTER_TARGET_PID carries its payload in RDX, unlike the
+                 * other control leaves which use RCX.  KUSER selection remains
+                 * a local compatibility decision and is not part of the wire
+                 * meaning of this leaf.
                  */
                 linuwux_control.target_pid =
-                    ucontext->uc_mcontext.gregs[REG_RCX];
+                    ucontext->uc_mcontext.gregs[REG_RDX];
                 linuwux_control.target_pid_valid = 1;
 
                 linuwux_debug_observation(
@@ -1154,12 +1302,46 @@ native_cpuid:
     return 0;
 }
 
-static int linuwux_redirect_syscall(ucontext_t *ctx, uint64_t target)
+static uint64_t linuwux_syscall_resume_address(ucontext_t *ctx)
+{
+    const unsigned char *instruction =
+        (const unsigned char *)(uintptr_t)ctx->uc_mcontext.gregs[REG_RIP];
+
+    if (instruction[0] == 0x0f && instruction[1] == 0x05)
+        return (uint64_t)ctx->uc_mcontext.gregs[REG_RIP] + 2;
+
+    return (uint64_t)ctx->uc_mcontext.gregs[REG_RCX];
+}
+
+static int linuwux_redirect_syscall(ucontext_t *ctx, uint64_t target,
+                                    int rax_is_resume)
 {
     __uint128_t *xmm_regs = (__uint128_t *)ctx->uc_mcontext.fpregs->_xmm;
+    uint64_t selector = (uint64_t)ctx->uc_mcontext.gregs[REG_RAX];
 
-    xmm_regs[4] = ctx->uc_mcontext.gregs[REG_RAX] & 0xFFFFFFFF;
-    ctx->uc_mcontext.gregs[REG_RAX] = ctx->uc_mcontext.gregs[REG_RCX];
+    /*
+     * A trapped SYSCALL has already applied the CPU SFMASK to EFLAGS.
+     * R11 still contains the pre-SYSCALL value expected by the redirected
+     * Windows-side entry point.
+     */
+    ctx->uc_mcontext.gregs[REG_EFL] =
+        ctx->uc_mcontext.gregs[REG_R11];
+
+    /*
+     * Preserve the original selector in the low 32 bits of XMM4 without
+     * disturbing the remaining register contents.
+     */
+    xmm_regs[4] =
+        (xmm_regs[4] & ~((__uint128_t)0xffffffffu)) |
+        (selector & 0xffffffffu);
+
+    if (rax_is_resume)
+        ctx->uc_mcontext.gregs[REG_RAX] =
+            linuwux_syscall_resume_address(ctx);
+    else
+        ctx->uc_mcontext.gregs[REG_RAX] =
+            ctx->uc_mcontext.gregs[REG_RCX];
+
     ctx->uc_mcontext.gregs[REG_RCX] = target;
     ctx->uc_mcontext.gregs[REG_RIP] = target;
 
@@ -1170,7 +1352,9 @@ static int linuwux_handle_sigsys(void *sigcontext)
 {
     ucontext_t *ctx = sigcontext;
     __uint128_t *xmm_regs = (__uint128_t *)ctx->uc_mcontext.fpregs->_xmm;
-    uint32_t syscall_id = (uint32_t)ctx->uc_mcontext.gregs[REG_RAX];
+    uint64_t syscall_number = (uint64_t)ctx->uc_mcontext.gregs[REG_RAX];
+    uint32_t syscall_id = (uint32_t)syscall_number;
+    uint64_t rcx = (uint64_t)ctx->uc_mcontext.gregs[REG_RCX];
 
     if ((xmm_regs[5] & 0xFFFFFFFFFFFFFFFF) == SyscallBypassMagic)
     {
@@ -1179,70 +1363,87 @@ static int linuwux_handle_sigsys(void *sigcontext)
         return 0;
     }
 
-    if (ctx->uc_mcontext.gregs[REG_RAX] == 0xffff)
+    if (syscall_number == UINT64_C(0xffff))
         return 0;
 
-    if (ctx->uc_mcontext.gregs[REG_RAX] == 0x7fffffffffff)
+    if (syscall_number == UINT64_C(0x7fffffffffff))
         return 0;
 
     linuwux_debug_observation(
         "sigsys",
-        (uint64_t)syscall_id,
+        syscall_number,
         (uint64_t)ctx->uc_mcontext.gregs[REG_R10]);
 
-    /*
-     * Specific dispatch registrations take precedence over fallback routing.
-     */
-    if (linuwux_control.system.target_valid &&
-        linuwux_control.system.syscall_id_valid &&
-        linuwux_control.system.target != 0 &&
-        syscall_id == linuwux_control.system.syscall_id &&
-        ctx->uc_mcontext.gregs[REG_R10] <= 0)
+    switch (linuwux_control.syscall_convention)
     {
-        linuwux_debug_observation(
-            "sigsys-route-system",
-            (uint64_t)syscall_id,
-            linuwux_control.system.target);
+        case LINUWUX_SYSCALL_RESUME_REPLAY:
+            if (linuwux_control.resume_target_valid &&
+                linuwux_control.resume_target != 0)
+            {
+                linuwux_debug_observation(
+                    "sigsys-route-resume",
+                    syscall_number,
+                    linuwux_control.resume_target);
 
-        return linuwux_redirect_syscall(
-            ctx, linuwux_control.system.target);
-    }
+                return linuwux_redirect_syscall(
+                    ctx, linuwux_control.resume_target, 1);
+            }
+            break;
 
-    if (linuwux_control.attributes.target_valid &&
-        linuwux_control.attributes.syscall_id_valid &&
-        linuwux_control.attributes.target != 0 &&
-        syscall_id == linuwux_control.attributes.syscall_id)
-    {
-        linuwux_debug_observation(
-            "sigsys-route-attributes",
-            (uint64_t)syscall_id,
-            linuwux_control.attributes.target);
+        case LINUWUX_SYSCALL_SELECTOR_DISPATCH:
+            if ((syscall_number == UINT64_C(0x13371337) ||
+                 syscall_number == UINT64_C(0x13371338)) &&
+                rcx <= UINT64_C(0x7fffffffffff) &&
+                linuwux_control.resume_target_valid &&
+                linuwux_control.resume_target != 0)
+            {
+                linuwux_debug_observation(
+                    "sigsys-route-selector",
+                    syscall_number,
+                    linuwux_control.resume_target);
 
-        return linuwux_redirect_syscall(
-            ctx, linuwux_control.attributes.target);
-    }
+                return linuwux_redirect_syscall(
+                    ctx, linuwux_control.resume_target, 0);
+            }
+            break;
 
-    /*
-     * A SYSTEM handler without a syscall ID is a usable fallback target.
-     * The registration itself remains SYSTEM_HANDLER state: no target is
-     * copied or reclassified when SIGSYS arrives.
-     */
-    if (linuwux_control.system.target_valid &&
-        !linuwux_control.system.syscall_id_valid &&
-        linuwux_control.system.target != 0)
-    {
-        linuwux_debug_observation(
-            "sigsys-route-system-fallback",
-            (uint64_t)syscall_id,
-            linuwux_control.system.target);
+        case LINUWUX_SYSCALL_DUAL_DISPATCH:
+            if (linuwux_control.system.target_valid &&
+                linuwux_control.system.syscall_id_valid &&
+                linuwux_control.system.target != 0 &&
+                syscall_id == linuwux_control.system.syscall_id &&
+                ctx->uc_mcontext.gregs[REG_R10] == 0 &&
+                rcx <= UINT64_C(0x7fffffffffff))
+            {
+                linuwux_debug_observation(
+                    "sigsys-route-system",
+                    syscall_number,
+                    linuwux_control.system.target);
 
-        return linuwux_redirect_syscall(
-            ctx, linuwux_control.system.target);
+                return linuwux_redirect_syscall(
+                    ctx, linuwux_control.system.target, 0);
+            }
+
+            if (linuwux_control.attributes.target_valid &&
+                linuwux_control.attributes.syscall_id_valid &&
+                linuwux_control.attributes.target != 0 &&
+                syscall_id == linuwux_control.attributes.syscall_id &&
+                rcx <= UINT64_C(0x7fffffffffff))
+            {
+                linuwux_debug_observation(
+                    "sigsys-route-attributes",
+                    syscall_number,
+                    linuwux_control.attributes.target);
+
+                return linuwux_redirect_syscall(
+                    ctx, linuwux_control.attributes.target, 0);
+            }
+            break;
     }
 
     linuwux_debug_observation(
         "sigsys-unhandled",
-        (uint64_t)syscall_id,
+        syscall_number,
         (uint64_t)ctx->uc_mcontext.gregs[REG_R10]);
 
     return 0;

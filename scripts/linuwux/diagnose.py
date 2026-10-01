@@ -656,8 +656,12 @@ class Diagnostics:
                         "SYSTEM target-state helper",
                     ),
                     (
-                        "return linuwux_control.system.target != 0;",
-                        "SYSTEM target value gating",
+                        "return linuwux_control.system.target != 0 ||",
+                        "Registered target value gating",
+                    ),
+                    (
+                        "linuwux_control.resume_target != 0;",
+                        "Resume target value gating",
                     ),
                     (
                         "static inline int linuwux_control_session_observed(void)",
@@ -668,8 +672,20 @@ class Diagnostics:
                         "Historical CPUID profile policy",
                     ),
                     (
-                        "static inline int linuwux_use_cr3_system_kuser_profile(void)",
-                        "CR3 SYSTEM KUSER profile policy",
+                        "enum linuwux_kuser_recipe",
+                        "KUSER recipe model",
+                    ),
+                    (
+                        "static enum linuwux_kuser_recipe linuwux_kuser_recipe(void)",
+                        "KUSER recipe selector",
+                    ),
+                    (
+                        "static void linuwux_apply_kuser_recipe(void)",
+                        "KUSER recipe application",
+                    ),
+                    (
+                        "static void linuwux_apply_target_pid_policy(void)",
+                        "TARGET_PID KUSER policy",
                     ),
                     (
                         "case 0x69696969:",
@@ -681,7 +697,7 @@ class Diagnostics:
                     ),
                     (
                         "case 0x336933:",
-                        "SYSTEM target control leaf",
+                        "RESUME handler control leaf",
                     ),
                     (
                         "case 0x336943:",
@@ -704,8 +720,16 @@ class Diagnostics:
                         "TARGET_PID control leaf",
                     ),
                     (
+                        '"resume-target"',
+                        "RESUME target registration diagnostic",
+                    ),
+                    (
                         '"system-target"',
                         "SYSTEM target registration diagnostic",
+                    ),
+                    (
+                        '"resume-promoted-system"',
+                        "Resume-to-SYSTEM promotion diagnostic",
                     ),
                     (
                         '"system-syscall-id"',
@@ -724,16 +748,20 @@ class Diagnostics:
                         "TARGET_PID registration diagnostic",
                     ),
                     (
+                        '"sigsys-route-resume"',
+                        "Resume-replay SIGSYS route diagnostic",
+                    ),
+                    (
+                        '"sigsys-route-selector"',
+                        "Selector-dispatch SIGSYS route diagnostic",
+                    ),
+                    (
                         '"sigsys-route-system"',
                         "SYSTEM SIGSYS route diagnostic",
                     ),
                     (
                         '"sigsys-route-attributes"',
                         "ATTRIBUTES SIGSYS route diagnostic",
-                    ),
-                    (
-                        '"sigsys-route-system-fallback"',
-                        "SYSTEM fallback SIGSYS route diagnostic",
                     ),
                 ):
                     self.expect_present(
@@ -756,9 +784,10 @@ class Diagnostics:
                 hooks,
                 "linuwux_has_system_target() ? 0 : (1u << 31)",
                 3,
-                "CPUID hypervisor bit SYSTEM-target gating",
+                "CPUID hypervisor bit registered-target gating",
                 hints=(
                     "linuwux_has_system_target",
+                    "resume_target",
                     "1u << 31",
                 ),
             )
@@ -801,7 +830,7 @@ class Diagnostics:
                 "static inline int linuwux_control_session_observed(void)"
             )
             session_end = hooks.find(
-                "static void linuwux_apply_system_registration_policy(void)",
+                "static inline int linuwux_use_historical_cpuid_profile(void)",
                 session_start,
             )
 
@@ -809,6 +838,7 @@ class Diagnostics:
                 session_body = hooks[session_start:session_end]
 
                 required_session_facts = (
+                    "linuwux_control.resume_target_valid",
                     "linuwux_control.system.target_valid",
                     "linuwux_control.system.syscall_id_valid",
                     "linuwux_control.attributes.target_valid",
@@ -848,7 +878,151 @@ class Diagnostics:
                     "unable to isolate linuwux_control_session_observed",
                     self.hooks,
                     "linuwux_control_session_observed",
-                    "linuwux_apply_system_registration_policy",
+                    "linuwux_use_historical_cpuid_profile",
+                )
+
+            router_start = hooks.find(
+                "static int linuwux_handle_sigsys(void *sigcontext)"
+            )
+            router_end = hooks.find(
+                "#endif /* LINUWUX_HOOKS_INCLUDED */",
+                router_start,
+            )
+
+            if router_start >= 0 and router_end > router_start:
+                router_body = hooks[router_start:router_end]
+
+                resume_start = router_body.find(
+                    "case LINUWUX_SYSCALL_RESUME_REPLAY:"
+                )
+                selector_start = router_body.find(
+                    "case LINUWUX_SYSCALL_SELECTOR_DISPATCH:"
+                )
+                dual_start = router_body.find(
+                    "case LINUWUX_SYSCALL_DUAL_DISPATCH:"
+                )
+
+                if (
+                    resume_start >= 0
+                    and selector_start > resume_start
+                    and dual_start > selector_start
+                ):
+                    resume_body = router_body[
+                        resume_start:selector_start
+                    ]
+                    selector_body = router_body[
+                        selector_start:dual_start
+                    ]
+                    dual_body = router_body[dual_start:]
+
+                    resume_required = (
+                        "linuwux_control.resume_target_valid",
+                        "linuwux_control.resume_target != 0",
+                        "ctx, linuwux_control.resume_target, 1",
+                    )
+                    selector_required = (
+                        "syscall_number == UINT64_C(0x13371337)",
+                        "syscall_number == UINT64_C(0x13371338)",
+                        "rcx <= UINT64_C(0x7fffffffffff)",
+                        "linuwux_control.resume_target_valid",
+                        "linuwux_control.resume_target != 0",
+                        "ctx, linuwux_control.resume_target, 0",
+                    )
+                    system_start = dual_body.find(
+                        "if (linuwux_control.system.target_valid"
+                    )
+                    attributes_start = dual_body.find(
+                        "if (linuwux_control.attributes.target_valid"
+                    )
+
+                    if (
+                        system_start >= 0
+                        and attributes_start > system_start
+                    ):
+                        system_body = dual_body[
+                            system_start:attributes_start
+                        ]
+                        attributes_body = dual_body[attributes_start:]
+                    else:
+                        system_body = ""
+                        attributes_body = ""
+
+                    system_required = (
+                        "linuwux_control.system.target_valid",
+                        "linuwux_control.system.syscall_id_valid",
+                        "syscall_id == linuwux_control.system.syscall_id",
+                        "ctx->uc_mcontext.gregs[REG_R10] == 0",
+                        "rcx <= UINT64_C(0x7fffffffffff)",
+                    )
+                    attributes_required = (
+                        "linuwux_control.attributes.target_valid",
+                        "linuwux_control.attributes.syscall_id_valid",
+                        "syscall_id == linuwux_control.attributes.syscall_id",
+                        "rcx <= UINT64_C(0x7fffffffffff)",
+                    )
+
+                    missing_resume = tuple(
+                        item for item in resume_required
+                        if item not in resume_body
+                    )
+                    missing_selector = tuple(
+                        item for item in selector_required
+                        if item not in selector_body
+                    )
+                    missing_system = tuple(
+                        item for item in system_required
+                        if item not in system_body
+                    )
+                    missing_attributes = tuple(
+                        item for item in attributes_required
+                        if item not in attributes_body
+                    )
+
+                    forbidden_fallback = (
+                        "sigsys-route-system-fallback"
+                        in router_body
+                    )
+
+                    if (
+                        not missing_resume
+                        and not missing_selector
+                        and not missing_system
+                        and not missing_attributes
+                        and not forbidden_fallback
+                    ):
+                        self.pass_(
+                            "SIGSYS convention routing semantics",
+                            "resume/selector/dual-dispatch",
+                        )
+                    else:
+                        self.fail(
+                            "SIGSYS convention routing semantics",
+                            f"resume-missing={missing_resume}, "
+                            f"selector-missing={missing_selector}, "
+                            f"system-missing={missing_system}, "
+                            f"attributes-missing={missing_attributes}, "
+                            f"system-fallback={forbidden_fallback}",
+                            self.hooks,
+                            "LINUWUX_SYSCALL_RESUME_REPLAY",
+                            "LINUWUX_SYSCALL_SELECTOR_DISPATCH",
+                            "LINUWUX_SYSCALL_DUAL_DISPATCH",
+                        )
+                else:
+                    self.fail(
+                        "SIGSYS convention routing semantics",
+                        f"case positions: resume={resume_start}, "
+                        f"selector={selector_start}, dual={dual_start}",
+                        self.hooks,
+                        "LINUWUX_SYSCALL_RESUME_REPLAY",
+                        "LINUWUX_SYSCALL_SELECTOR_DISPATCH",
+                        "LINUWUX_SYSCALL_DUAL_DISPATCH",
+                    )
+            else:
+                self.fail(
+                    "SIGSYS convention routing semantics",
+                    "unable to isolate linuwux_handle_sigsys",
+                    self.hooks,
+                    "linuwux_handle_sigsys",
                 )
 
         self.expect_present(
