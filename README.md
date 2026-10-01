@@ -37,7 +37,7 @@ The current **LinUwUx Rework** does not replace that work; it restructures and e
 The original patch and the related discussion can be found on [cs.rin.ru](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989).
 
 > [!TIP]
-> **LinUwUx Runtime:** Also consider the work by **LinUwUx, brcly, xXJSONDeruloXx and the other contributors to the LinUwUx Runtime**. It brings the same underlying compatibility concept outside of modified Proton builds, providing a more independent and inherently robust approach. Proton-LinUwUx is maintained alongside it as both an alternative implementation and a fallback, preserving the patched-Proton approach and giving users the freedom to choose whichever solution better suits their setup and preferences.
+> [**LinUwUx Runtime**](https://github.com/brcly/proton-LinUwUx-patch): The Runtime developed by **LinUwUx, brcly, xXJSONDeruloXx and other contributors** is the main and recommended approach to using LinUwUx. It brings the underlying compatibility concept outside of modified Proton builds, providing a more independent and inherently robust solution. Proton-LinUwUx Rework is maintained alongside it as an alternative and fallback implementation, preserving the patched-Proton approach for compatibility, testing and cases where a Proton-integrated implementation is useful.
 
 > [!NOTE]
 > Proton and Wine continue to evolve, so compatibility with future upstream releases may require maintenance updates. The project is currently at a stable milestone, with future work focused primarily on compatibility with new Proton/Wine versions, regressions and reported issues.
@@ -181,7 +181,9 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
 > [!NOTE]
 > The runner path may need to be set again after adding a game or changing its launch options.
 
-## AVX Compatibility
+## Variables
+
+### AVX Compatibility
 
 Some games may require AVX support to be exposed by the LinUwUx compatibility layer.
 
@@ -195,11 +197,39 @@ Only enable this option for games that require it. Games whose token was generat
 
 This option is therefore intended to be configured per game rather than enabled globally.
 
+### Syscall Compatibility Mode
+
+Some games may require the optional LinUwUx syscall compatibility mode:
+
+```text
+LINUWUX_SYSCALL_HACK=1
+```
+
+This mode is disabled by default and should not be enabled globally.
+
+If a game fails to launch, you may want to try enabling `LINUWUX_SYSCALL_HACK=1` for that game and check whether it resolves the issue.
+
+The syscall compatibility behavior integrated into the Rework is based on the more recent LinUwUx Runtime work by [brcly](https://github.com/brcly/proton-LinUwUx-patch), adapted to the Proton-LinUwUx Rework architecture.
+
 ## FAQ
 
 ### How does the Hypervisor (HV) bypass work?
 
 For information about the HV bypass, its requirements, setup and compatibility, please refer to the dedicated **[cs.rin.ru discussion thread](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)**.
+
+### What's the difference between Proton-LinUwUx Rework and the LinUwUx Runtime?
+
+The two projects provide different ways of using LinUwUx.
+
+The **LinUwUx Runtime** is the main and recommended approach. It is actively developed by LinUwUx, brcly, xXJSONDeruloXx and other contributors, and is intended to provide a more universal solution without requiring a dedicated Proton build.
+
+**Proton-LinUwUx Rework** takes a different approach. It integrates the required LinUwUx behavior directly into Proton/Wine and provides prebuilt Proton-GE and Proton-CachyOS variants.
+
+The Rework should therefore be considered an **alternative and fallback approach**, rather than a replacement for the LinUwUx Runtime.
+
+Where applicable, the Rework also incorporates and adapts newer compatibility behavior developed as part of the Runtime work, while preserving its own Proton-integrated architecture.
+
+If the LinUwUx Runtime works for your setup, it should generally be preferred. Proton-LinUwUx Rework remains available for cases where a Proton-integrated implementation is useful or where users want an alternative implementation for compatibility or testing.
 
 ### What is the difference between Proton-CachyOS and Proton-GE?
 
