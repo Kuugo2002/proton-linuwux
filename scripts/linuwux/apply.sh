@@ -33,6 +33,38 @@ FD_FILE="$SOURCE_DIR/wine/server/fd.c"
 WINE_INF_FILE="$SOURCE_DIR/wine/loader/wine.inf.in"
 PROTON_FILE="$SOURCE_DIR/proton"
 
+# Reject symbolic links before modifying any Wine/Proton source files.
+# Otherwise cp or make_requests could overwrite targets outside the
+# transaction, leaving changes that rollback cannot restore.
+LINUWUX_PROTECTED_PATHS=(
+    "$SIGNAL_FILE"
+    "$VIRTUAL_FILE"
+    "$UNIX_PRIVATE_FILE"
+    "$NTUSER_FILE"
+    "$USER32_MAIN_FILE"
+    "$PROTOCOL_FILE"
+    "$FD_FILE"
+    "$WINE_INF_FILE"
+    "$PROTON_FILE"
+    "$SOURCE_DIR/wine/include/wine/server_protocol.h"
+    "$SOURCE_DIR/wine/server/request_trace.h"
+    "$SOURCE_DIR/wine/server/request_handlers.h"
+    "$SOURCE_DIR/wine/include/wine/server_protocol.h.new"
+    "$SOURCE_DIR/wine/server/request_trace.h.new"
+    "$SOURCE_DIR/wine/server/request_handlers.h.new"
+    "$HOOKS_DEST"
+)
+
+for LINUWUX_PROTECTED_PATH in "${LINUWUX_PROTECTED_PATHS[@]}"
+do
+    if [[ -L "$LINUWUX_PROTECTED_PATH" ]]
+    then
+        echo "Error: symbolic link not allowed in LinUwUx source transaction:" >&2
+        echo "$LINUWUX_PROTECTED_PATH" >&2
+        exit 1
+    fi
+done
+
 if [[ ! -f "$HOOKS_SOURCE" ]]
 then
     echo "Error: LinUwUx hooks source not found:" >&2
@@ -356,61 +388,105 @@ else
     exit 1
 fi
 
-SIGNAL_TMP="$(mktemp)"
-VIRTUAL_TMP="$(mktemp)"
-UNIX_PRIVATE_TMP="$(mktemp)"
-NTUSER_TMP="$(mktemp)"
-USER32_MAIN_TMP="$(mktemp)"
-PROTOCOL_TMP="$(mktemp)"
-FD_TMP="$(mktemp)"
-WINE_INF_TMP="$(mktemp)"
-PROTON_TMP="$(mktemp)"
-SIGNAL_BACKUP="$(mktemp)"
-VIRTUAL_BACKUP="$(mktemp)"
-UNIX_PRIVATE_BACKUP="$(mktemp)"
-NTUSER_BACKUP="$(mktemp)"
-USER32_MAIN_BACKUP="$(mktemp)"
-PROTOCOL_BACKUP="$(mktemp)"
-FD_BACKUP="$(mktemp)"
-WINE_INF_BACKUP="$(mktemp)"
-PROTON_BACKUP="$(mktemp)"
+TRANSACTION_DIR="$(mktemp -d)"
+TRANSACTION_READY=0
 
-cp -p "$SIGNAL_FILE" "$SIGNAL_BACKUP"
-cp -p "$VIRTUAL_FILE" "$VIRTUAL_BACKUP"
-cp -p "$UNIX_PRIVATE_FILE" "$UNIX_PRIVATE_BACKUP"
-cp -p "$NTUSER_FILE" "$NTUSER_BACKUP"
-cp -p "$USER32_MAIN_FILE" "$USER32_MAIN_BACKUP"
-cp -p "$PROTOCOL_FILE" "$PROTOCOL_BACKUP"
-cp -p "$FD_FILE" "$FD_BACKUP"
-cp -p "$WINE_INF_FILE" "$WINE_INF_BACKUP"
-cp -p "$PROTON_FILE" "$PROTON_BACKUP"
+SIGNAL_TMP="$TRANSACTION_DIR/signal.tmp"
+VIRTUAL_TMP="$TRANSACTION_DIR/virtual.tmp"
+UNIX_PRIVATE_TMP="$TRANSACTION_DIR/unix_private.tmp"
+NTUSER_TMP="$TRANSACTION_DIR/ntuser.tmp"
+USER32_MAIN_TMP="$TRANSACTION_DIR/user32_main.tmp"
+PROTOCOL_TMP="$TRANSACTION_DIR/protocol.tmp"
+FD_TMP="$TRANSACTION_DIR/fd.tmp"
+WINE_INF_TMP="$TRANSACTION_DIR/wine_inf.tmp"
+PROTON_TMP="$TRANSACTION_DIR/proton.tmp"
 
-cleanup()
+TRANSACTION_FILES=(
+    "$SIGNAL_FILE"
+    "$VIRTUAL_FILE"
+    "$UNIX_PRIVATE_FILE"
+    "$NTUSER_FILE"
+    "$USER32_MAIN_FILE"
+    "$PROTOCOL_FILE"
+    "$FD_FILE"
+    "$WINE_INF_FILE"
+    "$PROTON_FILE"
+    "$SOURCE_DIR/wine/include/wine/server_protocol.h"
+    "$SOURCE_DIR/wine/server/request_trace.h"
+    "$SOURCE_DIR/wine/server/request_handlers.h"
+    "$SOURCE_DIR/wine/include/wine/server_protocol.h.new"
+    "$SOURCE_DIR/wine/server/request_trace.h.new"
+    "$SOURCE_DIR/wine/server/request_handlers.h.new"
+    "$HOOKS_DEST"
+)
+
+transaction_cleanup()
 {
-    rm -f "$SIGNAL_TMP" "$VIRTUAL_TMP" "$UNIX_PRIVATE_TMP" \
-          "$NTUSER_TMP" "$USER32_MAIN_TMP" \
-          "$PROTOCOL_TMP" "$FD_TMP" "$WINE_INF_TMP" "$PROTON_TMP" \
-          "$SIGNAL_BACKUP" "$VIRTUAL_BACKUP" "$UNIX_PRIVATE_BACKUP" \
-          "$NTUSER_BACKUP" "$USER32_MAIN_BACKUP" \
-          "$PROTOCOL_BACKUP" "$FD_BACKUP" "$WINE_INF_BACKUP" "$PROTON_BACKUP"
+    local status=$?
+    local failed=0
+    local i file backup_file
+
+    trap - EXIT ERR INT TERM HUP
+
+    if [[ "$status" -ne 0 && "$TRANSACTION_READY" -eq 1 ]]
+    then
+        echo "LinUwUx: application failed; restoring source files..." >&2
+
+        for i in "${!TRANSACTION_FILES[@]}"
+        do
+            file="${TRANSACTION_FILES[$i]}"
+            backup_file="$TRANSACTION_DIR/original/$i"
+
+            if [[ -f "$TRANSACTION_DIR/existed/$i" ]]
+            then
+                if ! cp -a --remove-destination "$backup_file" "$file"
+                then
+                    echo "ERROR: failed to restore $file" >&2
+                    failed=1
+                fi
+            else
+                if ! rm -f "$file"
+                then
+                    echo "ERROR: failed to remove generated file $file" >&2
+                    failed=1
+                fi
+            fi
+        done
+    fi
+
+    if [[ "$failed" -ne 0 ]]
+    then
+        echo "ERROR: rollback incomplete; backups retained at $TRANSACTION_DIR" >&2
+        exit 1
+    fi
+
+    rm -rf -- "$TRANSACTION_DIR" || {
+        echo "WARNING: cannot remove transaction directory: $TRANSACTION_DIR" >&2
+        exit 1
+    }
+
+    exit "$status"
 }
 
-rollback()
-{
-    cp -p "$SIGNAL_BACKUP" "$SIGNAL_FILE"
-    cp -p "$VIRTUAL_BACKUP" "$VIRTUAL_FILE"
-    cp -p "$UNIX_PRIVATE_BACKUP" "$UNIX_PRIVATE_FILE"
-    cp -p "$NTUSER_BACKUP" "$NTUSER_FILE"
-    cp -p "$USER32_MAIN_BACKUP" "$USER32_MAIN_FILE"
-    cp -p "$PROTOCOL_BACKUP" "$PROTOCOL_FILE"
-    cp -p "$FD_BACKUP" "$FD_FILE"
-    cp -p "$WINE_INF_BACKUP" "$WINE_INF_FILE"
-    cp -p "$PROTON_BACKUP" "$PROTON_FILE"
-    rm -f "$HOOKS_DEST"
-}
+trap transaction_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
-trap rollback ERR
-trap cleanup EXIT
+mkdir -p "$TRANSACTION_DIR/original" "$TRANSACTION_DIR/existed"
+
+for i in "${!TRANSACTION_FILES[@]}"
+do
+    file="${TRANSACTION_FILES[$i]}"
+
+    if [[ -e "$file" || -L "$file" ]]
+    then
+        cp -a "$file" "$TRANSACTION_DIR/original/$i"
+        touch "$TRANSACTION_DIR/existed/$i"
+    fi
+done
+
+TRANSACTION_READY=1
 
 python3 - "$VIRTUAL_FILE" "$VIRTUAL_TMP" <<'PYVIRTUAL'
 from pathlib import Path
