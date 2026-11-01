@@ -3,66 +3,74 @@
 </p>
 
 <p align="center">
-  Proton-GE and Proton-CachyOS builds integrating the <strong>LinUwUx Rework</strong> compatibility layer.
+  集成 <strong>LinUwUx Rework</strong> 兼容层的 Proton-GE 与 Proton-CachyOS 构建。
 </p>
 
 <p align="center">
-  <a href="#downloads"><strong>Releases</strong></a>
+  <a href="#downloads"><strong>发布版本</strong></a>
   ·
-  <a href="https://sourceforge.net/projects/proton-linuwux/files/"><strong>Binary Downloads</strong></a>
+  <a href="https://sourceforge.net/projects/proton-linuwux/files/"><strong>二进制下载</strong></a>
   ·
-  <a href="https://t.me/+EdH8jcUUzcA2MmFk"><strong>Support</strong></a>
+  <a href="https://t.me/+EdH8jcUUzcA2MmFk"><strong>支持</strong></a>
 </p>
 
 <p align="center">
-  <a href="#downloads">Downloads</a>
+  <a href="#downloads">下载</a>
   ·
-  <a href="#features">Features</a>
+  <a href="#features">特性</a>
   ·
-  <a href="#installation">Installation</a>
+  <a href="#installation">安装</a>
   ·
-  <a href="#faq">FAQ</a>
+  <a href="#faq">常见问题</a>
 </p>
 
 ---
 
-## About
+<a id="about"></a>
 
-**Proton-LinUwUx** provides x86_64 builds of Proton-GE and Proton-CachyOS integrating the **LinUwUx Rework** compatibility layer.
+## 关于
 
-The project is built on the original LinUwUx patch and the work of its developer, **LinUwUx**, whose implementation provides the foundation for the compatibility behavior preserved by this project.
+**Proton-LinUwUx** 提供集成 **LinUwUx Rework** 兼容层的 x86_64 版 Proton-GE 与 Proton-CachyOS 构建。
 
-The current **LinUwUx Rework** does not replace that work; it restructures and extends it into a more modular, robust and maintainable compatibility layer, with the goal of preserving the original LinUwUx behavior while making the integration easier to adapt to future Proton/Wine changes, runtime protocol variants and upstream structural changes.
+本项目基于最初的 LinUwUx 补丁以及其开发者 **LinUwUx** 的工作成果构建，正是该实现为本项目所保留的兼容行为奠定了基础。
 
-The original patch and the related discussion can be found on [cs.rin.ru](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989).
+当前的 **LinUwUx Rework** 并未取代那项工作，而是将其重构并扩展为一个更模块化、更健壮、更易维护的兼容层：既保留原有 LinUwUx 行为，又让集成过程更容易适应未来的 Proton/Wine 变更、运行时协议变体以及上游结构变动。
+
+原始补丁及相关讨论可参见 [cs.rin.ru](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)。
 
 > [!TIP]
-> [**LinUwUx Runtime**](https://github.com/brcly/proton-LinUwUx-patch): The Runtime developed by **LinUwUx, brcly, xXJSONDeruloXx and other contributors** is the main and recommended approach to using LinUwUx. It brings the underlying compatibility concept outside of modified Proton builds, providing a more independent and inherently robust solution. Proton-LinUwUx Rework is maintained alongside it as an alternative and fallback implementation, preserving the patched-Proton approach for compatibility, testing and cases where a Proton-integrated implementation is useful.
+> [**LinUwUx Runtime**](https://github.com/brcly/proton-LinUwUx-patch)：由 **LinUwUx、brcly、xXJSONDeruloXx 及其他贡献者**开发的 Runtime 是使用 LinUwUx 的主要且推荐方案。它把底层的兼容概念带出被修改的 Proton 构建，提供了一种更独立、也更 inherently robust 的解决途径。Proton-LinUwUx Rework 与其并行维护，作为替代与回退实现，在需要兼容、测试或适合 Proton 集成实现的场景中保留「打补丁的 Proton」这一思路。
 
 > [!NOTE]
-> Proton and Wine continue to evolve, so compatibility with future upstream releases may require maintenance updates. The project is currently at a stable milestone, with future work focused primarily on compatibility with new Proton/Wine versions, regressions and reported issues.
+> Proton 与 Wine 仍在持续演进，因此与未来上游版本的兼容性可能需要后续维护更新。本项目目前处于稳定里程碑阶段，后续工作主要集中在与新版 Proton/Wine 的兼容性、回归问题以及用户反馈的问题修复上。
 
 > [!IMPORTANT]
-> These builds do not add unrelated performance tweaks. Project-specific changes are limited to the LinUwUx compatibility layer, its integration and the diagnostics required to maintain and troubleshoot it.
+> 这些构建不会加入与本项目无关的性能优化调整。项目特有的改动仅限于 LinUwUx 兼容层、它的集成方式，以及维护和排障该兼容层所必需的诊断功能。
 
-## Features
+<a id="features"></a>
 
-- Supports Proton-GE and Proton-CachyOS as separate release variants.
-- Provides ready-to-use x86_64 compatibility-tool archives.
-- Includes automation for applying the LinUwUx Rework and building supported Proton/Wine trees.
-- Includes structural diagnostics to help identify upstream changes that may break the automation.
-- Includes optional `LINUWUX_DEBUG=1` runtime diagnostics for compatibility and regression troubleshooting.
+## 特性
 
-## Available builds
+- 以独立发布版本的形式同时支持 Proton-GE 与 Proton-CachyOS。
+- 提供开箱即用的 x86_64 兼容工具压缩包。
+- 包含用于应用 LinUwUx Rework 以及构建受支持的 Proton/Wine 代码树的自动化流程。
+- 包含结构性诊断功能，帮助识别可能破坏自动化流程的上游改动。
+- 包含可选的 `LINUWUX_DEBUG=1` 运行时诊断，用于排查兼容性问题与回归问题。
 
-| Build | Upstream project | Architecture | Description |
+<a id="available-builds"></a>
+
+## 可用构建
+
+| 构建 | 上游项目 | 架构 | 说明 |
 |---|---|---:|---|
-| **Proton-GE LinUwUx** | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) | x86_64 | Supported Proton-GE release integrating the LinUwUx Rework. |
-| **Proton-CachyOS LinUwUx** | [CachyOS/proton-cachyos](https://github.com/CachyOS/proton-cachyos) | x86_64 | Supported Proton-CachyOS release integrating the LinUwUx Rework. |
+| **Proton-GE LinUwUx** | [GloriousEggroll/proton-ge-custom](https://github.com/GloriousEggroll/proton-ge-custom) | x86_64 | 集成 LinUwUx Rework 的受支持 Proton-GE 发行版。 |
+| **Proton-CachyOS LinUwUx** | [CachyOS/proton-cachyos](https://github.com/CachyOS/proton-cachyos) | x86_64 | 集成 LinUwUx Rework 的受支持 Proton-CachyOS 发行版。 |
 
-## Downloads
+<a id="downloads"></a>
 
-Release information is published on:
+## 下载
+
+发布信息发布于：
 
 <p align="center">
   <strong>
@@ -72,7 +80,7 @@ Release information is published on:
   </strong>
 </p>
 
-Binary archives are hosted on:
+二进制压缩包托管于：
 
 <p align="center">
   <strong>
@@ -80,14 +88,16 @@ Binary archives are hosted on:
   </strong>
 </p>
 
-Each binary archive is accompanied by a `.sha256` checksum file and contains a complete compatibility-tool directory that can be extracted into a supported compatibility-tools location.
+每个二进制压缩包都附带一个 `.sha256` 校验和文件，并包含一个完整的兼容工具目录，可直接解压到受支持的兼容工具位置。
 
-## Installation
+<a id="installation"></a>
+
+## 安装
 
 ### Steam
 
-1. Download the desired archive through [Releases](/xshaduwulfx/proton-linuwux/releases).
-2. Extract it into one of the following directories:
+1. 通过 [Releases](/xshaduwulfx/proton-linuwux/releases) 下载所需的压缩包。
+2. 将其解压到以下目录之一：
 
    ```text
    ~/.steam/root/compatibilitytools.d/
@@ -95,153 +105,157 @@ Each binary archive is accompanied by a `.sha256` checksum file and contains a c
    ~/.var/app/com.valvesoftware.Steam/.local/share/Steam/compatibilitytools.d/
    ```
 
-3. Create the selected directory if it does not already exist.
-4. Restart Steam.
-5. Right-click the game and open **Properties → Compatibility**.
-6. Enable **Force the use of a specific Steam Play compatibility tool**.
-7. Select the installed Proton-LinUwUx build.
+3. 如果所选目录尚不存在，请先创建。
+4. 重启 Steam。
+5. 右键点击游戏，打开 **属性 → 兼容性**。
+6. 启用 **强制使用特定的 Steam Play 兼容工具**。
+7. 选择已安装的 Proton-LinUwUx 构建。
 
 ### Heroic Games Launcher
 
-1. Download the desired archive through [Releases](/xshaduwulfx/proton-linuwux/releases).
+1. 通过 [Releases](/xshaduwulfx/proton-linuwux/releases) 下载所需的压缩包。
 
-2. Extract the Proton-LinUwUx directory into the appropriate Heroic Proton directory:
+2. 将 Proton-LinUwUx 目录解压到相应的 Heroic Proton 目录：
 
-   **Native installation:**
+   **原生安装：**
 
    ```text
    ~/.config/heroic/tools/proton/
    ```
 
-   **Flatpak installation:**
+   **Flatpak 安装：**
 
    ```text
    ~/.var/app/com.heroicgameslauncher.hgl/config/heroic/tools/proton/
    ```
 
-3. Create the selected directory if it does not already exist.
+3. 如果所选目录尚不存在，请先创建。
 
-4. Restart Heroic Games Launcher.
+4. 重启 Heroic Games Launcher。
 
-5. Select the desired game from the **Library**.
+5. 在 **Library（游戏库）** 中选择所需的游戏。
 
-6. Open the game's **Settings**.
+6. 打开该游戏的 **设置**。
 
-7. Open the **Wine** section.
+7. 打开 **Wine** 部分。
 
-8. Under **Wine Version**, select the installed Proton-LinUwUx build.
+8. 在 **Wine 版本** 中选择已安装的 Proton-LinUwUx 构建。
 
-9. Launch the game.
+9. 启动游戏。
 
 ### Lutris
 
-1. Download the desired archive through [Releases](/xshaduwulfx/proton-linuwux/releases).
+1. 通过 [Releases](/xshaduwulfx/proton-linuwux/releases) 下载所需的压缩包。
 
-2. Extract the Proton-LinUwUx directory into the Lutris custom Wine runners directory:
+2. 将 Proton-LinUwUx 目录解压到 Lutris 的自定义 Wine 运行器目录：
 
-   **Native installation:**
+   **原生安装：**
 
    ```text
    ~/.local/share/lutris/runners/wine/
    ```
 
-   **Flatpak installation:**
+   **Flatpak 安装：**
 
    ```text
    ~/.var/app/net.lutris.Lutris/data/lutris/runners/wine/
    ```
 
-3. Create the selected directory if it does not already exist.
+3. 如果所选目录尚不存在，请先创建。
 
-4. Restart Lutris.
+4. 重启 Lutris。
 
-5. Select the desired game from the **Library**.
+5. 在 **Library（游戏库）** 中选择所需的游戏。
 
-6. Open the game's **Configure** menu.
+6. 打开该游戏的 **配置（Configure）** 菜单。
 
-7. Open the **Runner options** tab.
+7. 打开 **运行器选项** 选项卡。
 
-8. Under **Wine version**, select the installed Proton-LinUwUx build.
+8. 在 **Wine 版本** 中选择已安装的 Proton-LinUwUx 构建。
 
-9. Save the configuration and launch the game.
+9. 保存配置并启动游戏。
 
 ### Faugus Launcher
 
-1. Extract the build into one of the Steam compatibility-tools directories listed above.
-2. When using the Flatpak version of Faugus Launcher, open **Flatseal**.
-3. Select Faugus Launcher and add the extraction path under **Filesystems → Other files**.
-4. Open:
+1. 将构建解压到上文列出的某个 Steam 兼容工具目录中。
+2. 使用 Flatpak 版 Faugus Launcher 时，请打开 **Flatseal**。
+3. 选择 Faugus Launcher，并在 **Filesystems → Other files** 下添加解压路径。
+4. 打开：
 
    ```text
    ~/.var/app/io.github.Faugus.faugus-launcher/data/faugus-launcher/games.json
    ```
 
-5. Find the relevant game entry and set its `"runner"` value to the absolute path of the extracted Proton directory.
+5. 找到对应的游戏条目，将其 `"runner"` 值设置为解压后 Proton 目录的绝对路径。
 
 > [!NOTE]
-> The runner path may need to be set again after adding a game or changing its launch options.
+> 在添加游戏或修改启动选项之后，可能需要重新设置一次运行器路径。
 
-## Variables
+<a id="variables"></a>
 
-### AVX Compatibility
+## 变量
 
-Some games may require AVX support to be exposed by the LinUwUx compatibility layer.
+### AVX 兼容性
 
-If a game reports that AVX or AVX2 support is required, try launching it with:
+某些游戏可能需要由 LinUwUx 兼容层暴露出 AVX 支持。
+
+如果游戏提示需要 AVX 或 AVX2 支持，可以尝试使用以下方式启动：
 
 ```text
 PROTON_AVX=1
 ```
 
-Only enable this option for games that require it. Games whose token was generated without AVX support may fail to launch when `PROTON_AVX=1` is enabled.
+请仅对确实需要该选项的游戏启用此选项。那些在未启用 AVX 支持的情况下生成的令牌，在开启 `PROTON_AVX=1` 后可能无法启动。
 
-This option is therefore intended to be configured per game rather than enabled globally.
+因此，该选项应当按单个游戏进行配置，而不是全局启用。
 
-### Syscall Compatibility Mode
+### 系统调用兼容模式
 
-Some games may require the optional LinUwUx syscall compatibility mode:
+某些游戏可能需要启用可选的 LinUwUx 系统调用兼容模式：
 
 ```text
 LINUWUX_SYSCALL_HACK=1
 ```
 
-This mode is disabled by default and should not be enabled globally.
+该模式默认关闭，不应全局启用。
 
-If a game fails to launch, you may want to try enabling `LINUWUX_SYSCALL_HACK=1` for that game and check whether it resolves the issue.
+如果某个游戏无法启动，可以尝试为该游戏启用 `LINUWUX_SYSCALL_HACK=1`，并检查问题是否因此得到解决。
 
-The syscall compatibility behavior integrated into the Rework is based on the more recent LinUwUx Runtime work by [brcly](https://github.com/brcly/proton-LinUwUx-patch), adapted to the Proton-LinUwUx Rework architecture.
+Rework 中集成的系统调用兼容行为基于 [brcly](https://github.com/brcly/proton-LinUwUx-patch) 较新的 LinUwUx Runtime 工作，并已适配 Proton-LinUwUx Rework 的架构。
 
-## FAQ
+<a id="faq"></a>
 
-### How does the Hypervisor (HV) bypass work?
+## 常见问题
 
-For information about the HV bypass, its requirements, setup and compatibility, please refer to the dedicated **[cs.rin.ru discussion thread](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)**.
+### 虚拟机监控器（HV）绕过是如何实现的？
 
-### What's the difference between Proton-LinUwUx Rework and the LinUwUx Runtime?
+关于 HV 绕过的说明、所需条件、设置方式以及兼容性，请参阅专门的 **[cs.rin.ru 讨论帖](https://cs.rin.ru/forum/viewtopic.php?f=10&t=159989)**。
 
-The two projects provide different ways of using LinUwUx.
+### Proton-LinUwUx Rework 与 LinUwUx Runtime 有什么区别？
 
-The **LinUwUx Runtime** is the main and recommended approach. It is actively developed by LinUwUx, brcly, xXJSONDeruloXx and other contributors, and is intended to provide a more universal solution without requiring a dedicated Proton build.
+这两个项目提供了使用 LinUwUx 的不同方式。
 
-**Proton-LinUwUx Rework** takes a different approach. It integrates the required LinUwUx behavior directly into Proton/Wine and provides prebuilt Proton-GE and Proton-CachyOS variants.
+**LinUwUx Runtime** 是主要且推荐的方案。它由 LinUwUx、brcly、xXJSONDeruloXx 及其他贡献者积极开发，旨在提供一种更通用的解决途径，无需依赖专用的 Proton 构建。
 
-The Rework should therefore be considered an **alternative and fallback approach**, rather than a replacement for the LinUwUx Runtime.
+**Proton-LinUwUx Rework** 则采用了不同的思路：它把所需的 LinUwUx 行为直接集成进 Proton/Wine，并提供预构建的 Proton-GE 与 Proton-CachyOS 变体。
 
-Where applicable, the Rework also incorporates and adapts newer compatibility behavior developed as part of the Runtime work, while preserving its own Proton-integrated architecture.
+因此，Rework 应当被视为一种**替代与回退方案**，而不是 LinUwUx Runtime 的替代品。
 
-If the LinUwUx Runtime works for your setup, it should generally be preferred. Proton-LinUwUx Rework remains available for cases where a Proton-integrated implementation is useful or where users want an alternative implementation for compatibility or testing.
+在适用的情况下，Rework 还会吸收并改编作为 Runtime 工作一部分开发出的较新兼容行为，同时保留其自身的 Proton 集成架构。
 
-### What is the difference between Proton-CachyOS and Proton-GE?
+如果 LinUwUx Runtime 能在你的环境中正常工作，通常应当优先使用它。Proton-LinUwUx Rework 仍然适用于需要 Proton 集成实现，或希望获得另一种实现方式用于兼容性测试与验证的场景。
 
-Both variants receive the same project-specific patch, but they are based on different upstream Proton projects.
+### Proton-CachyOS 与 Proton-GE 有什么区别？
 
-Proton-GE and Proton-CachyOS may contain different Wine patches, components, defaults and compatibility changes. Results can therefore vary between games.
+两个变体都应用相同的项目专用补丁，但它们基于不同的上游 Proton 项目。
 
-### Do these builds work on immutable distributions?
+Proton-GE 与 Proton-CachyOS 可能包含不同的 Wine 补丁、组件、默认配置与兼容性改动，因此不同游戏之间的表现可能存在差异。
 
-Yes. This includes systems such as Steam Deck, Fedora Silverblue and Bazzite.
+### 这些构建能在不可变发行版上使用吗？
 
-Install the compatibility tool inside your home directory, for example:
+可以。包括 Steam Deck、Fedora Silverblue、Bazzite 等系统。
+
+请将兼容工具安装在主目录内，例如：
 
 ```text
 ~/.steam/root/compatibilitytools.d/
@@ -251,45 +265,51 @@ Install the compatibility tool inside your home directory, for example:
 ~/.var/app/net.lutris.Lutris/data/lutris/runners/wine/
 ```
 
-Do not attempt to install it into a read-only system directory such as `/usr/share/steam`.
+请勿尝试将其安装到 `/usr/share/steam` 这类只读的系统目录中。
 
-### Does the hypervisor bypass work on ARM devices?
+### 虚拟机监控器绕过在 ARM 设备上可用吗？
 
-No. Translators such as FEX-Emu do not currently provide all the required behavior, including `cpuid_fault` support, and user-mode emulation cannot reproduce every property checked by some protection systems.
+不可用。FEX-Emu 等翻译器目前并未提供全部所需行为（包括 `cpuid_fault` 支持），而用户态模拟也无法复现某些保护系统所检查的全部属性。
 
-These builds target **x86_64 Linux systems only**.
+这些构建**仅面向 x86_64 Linux 系统**。
 
-### Is there a risk of being banned?
+### 存在被封禁的风险吗？
 
-Use these builds at your own risk.
+请自行承担使用风险。
 
-Modified compatibility tools or attempts to bypass anti-tamper systems may violate the terms of service of a game, platform or online service. Avoid using modified builds in competitive or anti-cheat-protected multiplayer environments.
+修改过的兼容工具或试图绕过反篡改系统的行为，可能违反某个游戏、平台或在线服务的服务条款。请避免在竞技类或带反作弊保护的多人环境中使用修改版构建。
 
-### How are new Proton/Wine releases handled?
+### 新版 Proton/Wine 是如何处理的？
 
-The project is currently at a stable milestone.
+本项目目前处于稳定里程碑阶段。
 
-New Proton-GE, Proton-CachyOS and Wine releases are evaluated for compatibility with the LinUwUx Rework. The repository includes automation diagnostics intended to identify structural upstream changes quickly so the integration can be updated when required.
+新的 Proton-GE、Proton-CachyOS 与 Wine 发行版都会针对 LinUwUx Rework 的兼容性进行评估。仓库中包含自动化诊断机制，用于快速识别结构性的上游改动，以便在必要时更新集成方案。
 
-## Support & Announcements
+<a id="support"></a>
 
-For compatibility issues, regressions, build problems or troubleshooting:
+## 支持与公告
 
-- **Support & Troubleshooting:** https://t.me/+EdH8jcUUzcA2MmFk
-- **Announcements:** https://t.me/protonlinuwux
+如遇兼容性问题、回归问题、构建故障或需要排障：
 
-When reporting an issue, please include the Proton-LinUwUx build used, the affected game or application and any relevant logs. Runtime diagnostics can be enabled with `LINUWUX_DEBUG=1`. Optionally, diagnostics can also be written to a file with `LINUWUX_LOG=/path/to/linuwux.log`. Both variables can be used together. Please provide the resulting LinUwUx log when reporting an issue.
+- **支持与故障排查：** https://t.me/+EdH8jcUUzcA2MmFk
+- **公告：** https://t.me/protonlinuwux
 
-## Disclaimer
+报告问题时，请附上所用的 Proton-LinUwUx 构建、受影响的游戏或应用程序，以及相关日志。可通过 `LINUWUX_DEBUG=1` 启用运行时诊断。也可以使用 `LINUWUX_LOG=/path/to/linuwux.log` 将诊断信息写入文件。两个变量可以同时使用。报告问题时，请提供生成的 LinUwUx 日志。
 
-This repository is an independent community project and is not affiliated with Valve, CodeWeavers, GloriousEggroll, CachyOS or any game publisher.
+<a id="disclaimer"></a>
 
-All trademarks and project names belong to their respective owners.
+## 免责声明
 
-## Credits
+本仓库是一个独立的社区项目，与 Valve、CodeWeavers、GloriousEggroll、CachyOS 或任何游戏发行商均无隶属关系。
 
-- **LinUwUx** (original patch author)
+所有商标与项目名称均归各自所有者所有。
+
+<a id="credits"></a>
+
+## 致谢
+
+- **LinUwUx**（原始补丁作者）
 - **DenuvOwO Team**
 - **GloriousEggroll**
 - **CachyOS Team**
-- **Valve** and **CodeWeavers** for Proton and Wine development
+- **Valve** 与 **CodeWeavers**（Proton 与 Wine 的开发方）
