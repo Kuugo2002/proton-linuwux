@@ -74,9 +74,9 @@
 
 <p align="center">
   <strong>
-    <a href="https://codeberg.org/xshaduwulfx/proton-linuwux/releases">Codeberg Releases</a>
+    <a href="https://codeberg.org/xshaduwulfx/proton-linuwux/releases">Codeberg Releases（上游）</a>
     ·
-    <a href="https://github.com/xshaduwulfx/proton-linuwux/releases">GitHub Releases</a>
+    <a href="https://github.com/Kuugo2002/proton-linuwux/releases">GitHub Releases</a>
   </strong>
 </p>
 
@@ -96,7 +96,7 @@
 
 ### Steam
 
-1. 通过 [Releases](/xshaduwulfx/proton-linuwux/releases) 下载所需的压缩包。
+1. 通过 [Releases](/Kuugo2002/proton-linuwux/releases) 下载所需的压缩包。
 2. 将其解压到以下目录之一：
 
    ```text
@@ -113,7 +113,7 @@
 
 ### Heroic Games Launcher
 
-1. 通过 [Releases](/xshaduwulfx/proton-linuwux/releases) 下载所需的压缩包。
+1. 通过 [Releases](/Kuugo2002/proton-linuwux/releases) 下载所需的压缩包。
 
 2. 将 Proton-LinUwUx 目录解压到相应的 Heroic Proton 目录：
 
@@ -145,7 +145,7 @@
 
 ### Lutris
 
-1. 通过 [Releases](/xshaduwulfx/proton-linuwux/releases) 下载所需的压缩包。
+1. 通过 [Releases](/Kuugo2002/proton-linuwux/releases) 下载所需的压缩包。
 
 2. 将 Proton-LinUwUx 目录解压到 Lutris 的自定义 Wine 运行器目录：
 
