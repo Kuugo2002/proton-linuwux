@@ -90,6 +90,7 @@ stale_sud_fallback = """    if (!syscall_dispatch_enabled)
         RIP_sig(ucontext) -= 2;  /* retry the syscall */
         return;
     }
+
 """
 
 stale_count = handler.count(stale_sud_fallback)
@@ -115,28 +116,29 @@ eos_anchor = (
     "    /* HACK: The EOS version of easy anti cheat executes linux syscalls"
 )
 
-if handler.count(eos_anchor) > 1:
+if handler.count(eos_anchor) != 1:
     fail(
-        "expected at most one EOS syscall workaround anchor, "
+        "expected exactly one EOS syscall workaround anchor, "
         f"found {handler.count(eos_anchor)}"
     )
-
-# Anchor to the handler's Linux guard, not the optional EOS comment.
-# GE can put hack_native_syscalls before EOS, while CachyOS can have
-# only hack_native_syscalls and no EOS-specific workaround at all.
-linux_anchor = "#ifdef __linux__\n"
-
-if handler.count(linux_anchor) != 1:
-    fail("expected exactly one Linux block in LinUwUx sigsys_handler")
 
 probe_count = handler.count(probe)
 
 if probe_count == 0:
-    # Keep the probe before all upstream workarounds and retain their
-    # contents and ordering inside the existing Linux guard.
+    # The probe belongs inside the existing Linux block, directly
+    # before the EOS workaround.  Preserve that guard rather than
+    # manufacturing a second #ifdef/#endif pair.
+    linux_eos_anchor = "#ifdef __linux__\n" + eos_anchor
+
+    if handler.count(linux_eos_anchor) != 1:
+        fail(
+            "expected Linux EOS block immediately after SUD fallback "
+            "removal"
+        )
+
     handler = handler.replace(
-        linux_anchor,
-        linux_anchor + probe + "\n",
+        linux_eos_anchor,
+        "#ifdef __linux__\n" + probe + "\n" + eos_anchor,
         1,
     )
 
@@ -164,34 +166,17 @@ if "linuwux_handle_sigsys(sigcontext)" not in handler:
 if "__wine_syscall_dispatcher_prolog_end_ptr" not in handler:
     fail("normal Wine syscall dispatcher redirect disappeared")
 
-# Verify topology against the actual enclosing preprocessor block,
-# rather than an #endif that might belong to a later block.
+# Verify topology: probe and EOS must remain together inside the
+# same existing Linux preprocessor block.
 probe_pos = handler.find(probe)
 eos_pos = handler.find(eos_anchor)
-linux_pos = handler.find(linux_anchor)
-linux_end = -1
-depth = 0
-offset = linux_pos
-for line in handler[linux_pos:].splitlines(keepends=True):
-    directive = line.lstrip().split()
-    if directive and directive[0] in ("#if", "#ifdef", "#ifndef"):
-        depth += 1
-    elif directive and directive[0] == "#endif":
-        depth -= 1
-        if depth == 0:
-            linux_end = offset
-            break
-    elif depth == 1 and directive and directive[0] in ("#else", "#elif"):
-        fail("unexpected alternative branch in SIGSYS Linux block")
-    offset += len(line)
+linux_pos = handler.rfind("#ifdef __linux__", 0, probe_pos)
+linux_end = handler.find("#endif", eos_pos)
 
-if linux_end == -1:
-    fail("legacy BPF probe Linux guard is incomplete")
+if linux_pos == -1 or linux_end == -1:
+    fail("legacy BPF probe/EOS Linux guard is incomplete")
 
-if not (linux_pos < probe_pos < linux_end):
-    fail("legacy BPF probe is outside the SIGSYS Linux block")
-
-if eos_pos != -1 and not (probe_pos < eos_pos < linux_end):
+if not (linux_pos < probe_pos < eos_pos < linux_end):
     fail("legacy BPF probe and EOS workaround are not in the same Linux block")
 
 s = s[:handler_start] + handler + s[handler_end:]
